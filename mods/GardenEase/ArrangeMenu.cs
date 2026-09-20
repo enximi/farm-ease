@@ -16,6 +16,15 @@ internal sealed class ArrangeMenu : EaseMenu
     internal bool WaitingForHost { get; set; }
     private int UndoCount => multiplayer ? remoteUndoCount : session.UndoCount;
     private Vector2 cursor;
+    private bool batchMode;
+    private Vector2? selectionCorner;
+    private Vector2 grabOffset;
+    private BatchMove? previewSelection, previewPlan;
+    private BatchMove.Check? previewCheck;
+    private CoverageOverlay.Area[] previewCoverage = Array.Empty<CoverageOverlay.Area>();
+    private Vector2 previewTarget;
+    private long previewAt;
+    private Vector2 BatchTarget => cursor - grabOffset;
     private readonly bool previousViewportFreeze;
     private Vector2 cameraPosition;
     private Point lastViewportPosition;
@@ -107,6 +116,8 @@ internal sealed class ArrangeMenu : EaseMenu
     protected override void Confirm()
     {
         if (multiplayer != Context.IsMultiplayer) { exitThisMenu(false); return; }
+        if (WaitingForHost) return;
+        if (batchMode) { ConfirmBatch(); return; }
         if (multiplayer)
         {
             showReply = false;
@@ -122,11 +133,52 @@ internal sealed class ArrangeMenu : EaseMenu
         }
         catch (Exception ex) { Mod.Report(ex); session.Cancel(); message = "搬移未完成，已尝试恢复原位置。请查看 SMAPI 日志。"; }
     }
+    internal void ToggleBatch()
+    {
+        if (WaitingForHost || !Mod.Menu.CanUse(out _, true)) return;
+        if (session.HasSelection) { message = "请先放下或取消当前选中，再切换整理模式。"; showReply = true; return; }
+        selectionCorner = null; batchMode = !batchMode; showReply = false;
+        message = batchMode ? "批量框选：确认第一个角，再确认对角；最多 256 格。" : "单件整理：选中一个对象后搬移或交换。";
+        Game1.playSound("smallSelect");
+    }
+    private void ConfirmBatch()
+    {
+        showReply = false;
+        if (session.Batch == null && selectionCorner == null)
+        { selectionCorner = cursor; message = "移动到矩形的另一个角，再按确认；手柄 B / 键盘 Esc 取消框选。"; return; }
+        Rectangle area = selectionCorner is Vector2 corner ? BatchMove.Between(corner, cursor) : session.Batch!.Area;
+        if (session.Batch == null)
+        {
+            if (!BatchMove.ValidArea(session.Farm, area)) { message = "一次最多框选 256 格（如 16 × 16），请缩小范围。"; showReply = true; return; }
+            grabOffset = cursor - new Vector2(area.X, area.Y);
+            if (multiplayer)
+            {
+                Mod.Network.Send("SelectBatch", area.Location, GardenNetwork.DescribeArea(session.Farm, area), area);
+                return;
+            }
+            message = session.SelectBatch(area);
+            if (session.Batch != null) selectionCorner = null;
+        }
+        else if (multiplayer)
+        {
+            var targetArea = session.Batch.At(BatchTarget).DestinationArea;
+            if (!BatchMove.ValidArea(session.Farm, targetArea)) { message = "整组选区超出农场边界。"; showReply = true; return; }
+            Mod.Network.Send("PlaceBatch", BatchTarget.ToPoint(), GardenNetwork.DescribeArea(session.Farm, targetArea));
+        }
+        else
+        {
+            try { message = session.PlaceBatch(BatchTarget); }
+            catch (Exception ex) { Mod.Report(ex); session.Cancel(); message = "批量搬移未完成，已尝试恢复原位置。请查看 SMAPI 日志。"; }
+        }
+        showReply = true;
+        Game1.playSound("smallSelect");
+    }
     protected override void Back()
     {
         if (multiplayer && WaitingForHost) { ReturnToMainMenu(); return; }
-        if (multiplayer && session.Selected != null) { Mod.Network.Send("Cancel", Point.Zero, ""); return; }
-        if (session.Selected != null) { session.Cancel(); message = "已取消选中，对象仍在原位置。"; Game1.playSound("smallSelect"); }
+        if (selectionCorner != null) { selectionCorner = null; message = "已取消框选。"; showReply = false; return; }
+        if (multiplayer && session.HasSelection) { Mod.Network.Send("Cancel", Point.Zero, ""); return; }
+        if (session.HasSelection) { session.Cancel(); message = "已取消选中，对象仍在原位置。"; Game1.playSound("smallSelect"); }
         else ReturnToMainMenu();
     }
     private void ReturnToMainMenu()
@@ -136,6 +188,8 @@ internal sealed class ArrangeMenu : EaseMenu
     }
     protected override void Undo()
     {
+        if (WaitingForHost) return;
+        if (selectionCorner != null) { selectionCorner = null; message = "已取消框选；再次撤销可恢复上一步。"; return; }
         if (multiplayer) { Mod.Network.Send("Undo", Point.Zero, ""); return; }
         try
         {
@@ -159,7 +213,17 @@ internal sealed class ArrangeMenu : EaseMenu
         message = reply.Message;
         showReply = true;
         if (!reply.Selected) session.Cancel();
-        else if (session.Selected == null || reply.Action == "Select")
+        else if (reply.Batch && (session.Batch == null || reply.Action == "SelectBatch"))
+        {
+            selectionCorner = null;
+            session.SelectBatch(new Rectangle(reply.X, reply.Y, reply.Width, reply.Height));
+            if (session.Batch == null)
+            {
+                Mod.Network.Send("Cancel", Point.Zero, "");
+                message = "本地选区尚未同步，已请求取消；请稍后重新框选。";
+            }
+        }
+        else if (!reply.Batch && (session.Selected == null || reply.Action == "Select"))
         {
             session.Cancel();
             session.Select(new Vector2(reply.X, reply.Y));
@@ -175,6 +239,15 @@ internal sealed class ArrangeMenu : EaseMenu
         cursor = tile;
         Confirm();
     }
+    internal void MoveMouse(StardewModdingAPI.Events.CursorMovedEventArgs e)
+    {
+        // Camera scrolling also changes the world-space cursor tile. Only follow
+        // actual pointer movement, so edge scrolling cannot drag the selection.
+        if (!batchMode || e.NewPosition.ScreenPixels == e.OldPosition.ScreenPixels) return;
+        int x = Game1.getMouseX(), y = Game1.getMouseY();
+        if (top.Contains(x, y) || bottom.Contains(x, y) || !session.Farm.isTileOnMap(e.NewPosition.Tile)) return;
+        cursor = e.NewPosition.Tile; showReply = false;
+    }
 
     internal void DrawWorld(SpriteBatch b)
     {
@@ -188,6 +261,7 @@ internal sealed class ArrangeMenu : EaseMenu
                     ? session.Farm.doesTileHaveProperty(x, y, "Diggable", "Back") != null
                     : session.Farm.isTilePlaceable(new Vector2(x, y), session.Selected.Passable))
                     Ui.Outline(b, TileRect(new Vector2(x, y)), Color.White * 0.12f, 1);
+        if (batchMode) { DrawBatch(b); return; }
         if (session.Source is Vector2 source) Ui.Outline(b, TileRect(source), new Color(255, 207, 105), 4);
         bool valid = session.Selected == null || session.InvalidTarget(cursor) == null;
         var swapTarget = session.SwapTarget(cursor);
@@ -203,10 +277,52 @@ internal sealed class ArrangeMenu : EaseMenu
     }
     private static Rectangle TileRect(Vector2 tile) => new((int)tile.X * 64 - Game1.viewport.X, (int)tile.Y * 64 - Game1.viewport.Y, 64, 64);
 
+    private BatchMove.Check BatchPreview()
+    {
+        if (session.Batch == null) return new("请先框选需要整理的区域。", new());
+        long now = Environment.TickCount64;
+        if (!ReferenceEquals(previewSelection, session.Batch) || previewTarget != BatchTarget || now - previewAt > 100)
+        {
+            previewSelection = session.Batch; previewTarget = BatchTarget; previewAt = now;
+            previewPlan = session.Batch.At(BatchTarget);
+            previewCheck = session.CheckBatch(BatchTarget);
+            previewCoverage = BatchMove.ValidArea(session.Farm, previewPlan.DestinationArea)
+                ? CoverageOverlay.BatchAreas(session.Farm, previewPlan.Entries) : Array.Empty<CoverageOverlay.Area>();
+        }
+        return previewCheck!;
+    }
+    private void DrawBatch(SpriteBatch b)
+    {
+        if (session.Batch == null)
+        {
+            Rectangle area = BatchMove.Between(selectionCorner ?? cursor, cursor);
+            Color color = BatchMove.ValidArea(session.Farm, area) ? Ui.Accent : new Color(244, 107, 99);
+            var screen = new Rectangle(area.X * 64 - Game1.viewport.X, area.Y * 64 - Game1.viewport.Y, area.Width * 64, area.Height * 64);
+            b.Draw(Game1.staminaRect, screen, color * 0.16f); Ui.Outline(b, screen, color, 3);
+        }
+        else
+        {
+            var check = BatchPreview();
+            foreach (var area in previewCoverage) CoverageOverlay.DrawArea(b, area,
+                check.Reason == null || BatchTarget == session.Batch.Origin, secondary: true);
+            foreach (var tile in session.Batch.Entries.Select(e => e.From).Distinct())
+                Ui.Outline(b, TileRect(tile), check.Conflicts.Contains(tile) ? new Color(244, 107, 99) : new Color(255, 207, 105), 3);
+            foreach (var entry in previewPlan!.Entries)
+            {
+                Color tint = check.Conflicts.Contains(entry.To) ? new Color(244, 107, 99) : Ui.Accent;
+                var r = TileRect(entry.To);
+                b.Draw(Game1.staminaRect, r, tint * 0.18f); Ui.Outline(b, r, tint, 3);
+                if (entry.To != entry.From) entry.Item.DrawPreview(b, entry.To, tint);
+            }
+        }
+        Ui.Outline(b, TileRect(cursor), Color.White, 2);
+    }
+
     public override void draw(SpriteBatch b)
     {
         Ui.Box(b, top);
-        string selection = session.Selected == null ? "" : $" · {session.Selected.Name}";
+        string selection = batchMode ? session.Batch is { } batch ? $" · 批量 {batch.Entries.Length} 个对象" : " · 批量框选"
+            : session.Selected == null ? " · 单件整理" : $" · {session.Selected.Name}";
         Ui.Text(b, (multiplayer ? "田园巧整 · 时间继续流逝" : "田园巧整 · 时间已暂停") + selection, top.X + 24, top.Y + 12);
         Ui.Text(b, $"格子 {(int)cursor.X}, {(int)cursor.Y}    可撤销 {UndoCount} 步    退出整理后清空撤销记录", top.X + 24, top.Y + 46, Ui.Muted);
         Ui.Box(b, bottom);
@@ -215,6 +331,12 @@ internal sealed class ArrangeMenu : EaseMenu
                 ? "可以交换：按 A / Enter 确认，双方状态均保留。"
                 : "可以搬入：按 A / Enter 确认，原有状态保留。")
             : message;
+        if (batchMode && session.Batch != null) status = BatchPreview().Reason ?? "可以整体搬入：确认后一次搬移，原有状态保留。";
+        else if (batchMode && selectionCorner is Vector2 corner)
+        {
+            var area = BatchMove.Between(corner, cursor);
+            status = $"框选 {area.Width} × {area.Height} = {area.Width * area.Height} 格（最多 256）；确认对角完成选择。";
+        }
         if (showReply) status = message;
         if (WaitingForHost) status = "正在等待房主确认，请稍候……";
         string coverageHint = CoverageOverlay.Hint(session.Selected);
@@ -225,8 +347,8 @@ internal sealed class ArrangeMenu : EaseMenu
         if (!showReply && !WaitingForHost && session.Selected != null && (session.Source == cursor || session.InvalidTarget(cursor) == null) && coverageHint.Length > 0)
             status += "\n" + coverageHint;
         Ui.Wrapped(b, status, new Rectangle(bottom.X + 24, bottom.Y + 15, bottom.Width - 48, 65));
-        Ui.Text(b, "方向键 / 左摇杆 选格    A 确认    B 取消 / 返回    X 撤销", bottom.X + 24, bottom.Bottom - 53, Ui.Muted);
-        Ui.Text(b, "键盘：方向键 / WASD    Enter 确认    Esc 返回    Z 撤销", bottom.X + 24, bottom.Bottom - 27, Ui.Muted);
+        Ui.Text(b, "手柄：方向 / 摇杆选格    A 确认    B 取消    X 撤销    Y 单件 / 批量", bottom.X + 24, bottom.Bottom - 53, Ui.Muted);
+        Ui.Text(b, "键盘：方向 / WASD    Enter 确认    Esc 返回    Z 撤销    B 单件 / 批量", bottom.X + 24, bottom.Bottom - 27, Ui.Muted);
         drawMouse(b);
     }
 

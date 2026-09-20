@@ -7,7 +7,8 @@ namespace GardenEase;
 
 internal static class TreePlacement
 {
-    internal static string? Invalid(Farm farm, Vector2 target, ArrangeItem incoming, ArrangeItem? outgoing)
+    internal static string? Invalid(Farm farm, Vector2 target, ArrangeItem incoming, ArrangeItem? outgoing,
+        Func<Vector2, TerrainFeature?>? groundAt = null, Func<Vector2, SObject?>? objectAt = null)
     {
         if (!incoming.IsTree) return null;
         int x = (int)target.X, y = (int)target.Y;
@@ -22,10 +23,10 @@ internal static class TreePlacement
         // Evaluate the resulting layout, so moving one tile or swapping doesn't
         // count the tree/tapper that is about to leave its old position.
         Vector2 source = ((TerrainFeature)incoming.Value).Tile;
-        TerrainFeature? Ground(Vector2 tile) => tile == target ? (TerrainFeature)incoming.Value
+        TerrainFeature? Ground(Vector2 tile) => groundAt != null ? groundAt(tile) : tile == target ? (TerrainFeature)incoming.Value
             : tile == source ? outgoing?.Value as TerrainFeature
             : farm.terrainFeatures.TryGetValue(tile, out var ground) ? ground : null;
-        SObject? ObjectAt(Vector2 tile) => tile == target ? incoming.Tapper
+        SObject? ObjectAt(Vector2 tile) => objectAt != null ? objectAt(tile) : tile == target ? incoming.Tapper
             : tile == source ? outgoing?.Tapper
             : farm.objects.TryGetValue(tile, out var obj) ? obj : null;
         for (int dy = -2; dy <= 2; dy++)

@@ -3,17 +3,21 @@ using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewModdingAPI.Utilities;
 using StardewValley;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace GardenEase;
 
 internal sealed class GardenRequest
 {
-    public int Protocol { get; set; } = 1;
+    public int Protocol { get; set; } = 2;
     public string Session { get; set; } = "";
     public int Sequence { get; set; }
     public string Action { get; set; } = "";
     public int X { get; set; }
     public int Y { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
     public string Expected { get; set; } = "";
 }
 internal sealed class GardenReply
@@ -23,6 +27,9 @@ internal sealed class GardenReply
     public string Action { get; set; } = "";
     public bool Open { get; set; }
     public bool Selected { get; set; }
+    public bool Batch { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
     public int X { get; set; }
     public int Y { get; set; }
     public int UndoCount { get; set; }
@@ -31,10 +38,10 @@ internal sealed class GardenReply
 }
 
 // Only the host mutates farm state, processing each command to completion.
-// Editors have independent sessions and reserve only their selected source tile.
+// Editors have independent sessions and reserve their selected source tiles.
 internal sealed class GardenNetwork
 {
-    private const string RequestType = "Garden.Request.v1", ReplyType = "Garden.Reply.v1";
+    private const string RequestType = "Garden.Request.v2", ReplyType = "Garden.Reply.v2";
     private readonly ModEntry mod;
     private sealed class Client
     {
@@ -111,12 +118,12 @@ internal sealed class GardenNetwork
         state.Pending = null; state.Heartbeat = Environment.TickCount64;
         Send("Open", Point.Zero, "");
     }
-    internal bool Send(string action, Point tile, string expected)
+    internal bool Send(string action, Point tile, string expected, Rectangle? area = null)
     {
         var state = clients.Value;
         if (state.Menu == null || state.Pending != null) return false;
         var request = new GardenRequest { Session = state.Session, Sequence = ++state.Sequence,
-            Action = action, X = tile.X, Y = tile.Y, Expected = expected };
+            Action = action, X = tile.X, Y = tile.Y, Expected = expected, Width = area?.Width ?? 0, Height = area?.Height ?? 0 };
         state.Pending = request; state.StartedAt = state.SentAt = Environment.TickCount64;
         state.Menu.WaitingForHost = true;
         Dispatch(request);
@@ -217,7 +224,7 @@ internal sealed class GardenNetwork
     }
     private void Process(long player, GardenRequest request)
     {
-        if (request.Protocol != 1 || !Guid.TryParseExact(request.Session, "N", out _)
+        if (request.Protocol != 2 || !Guid.TryParseExact(request.Session, "N", out _)
             || string.IsNullOrEmpty(request.Action) || request.Action.Length > 16) return;
         var reply = new GardenReply { Session = request.Session, Sequence = request.Sequence, Action = request.Action };
         if (request.Action == "Close")
@@ -269,6 +276,43 @@ internal sealed class GardenNetwork
         {
             case "Open": reply.Message = "已连接房主，可以与其他玩家同时整理。时间继续流逝。"; break;
             case "Cancel": moves.Cancel(); reply.Message = "已取消选中，对象仍在原位置。"; break;
+            case "SelectBatch":
+            {
+                var area = new Rectangle(request.X, request.Y, request.Width, request.Height);
+                if (!BatchMove.ValidArea(moves.Farm, area)) { reply.Message = $"框选需在农场内，最多 {BatchMove.MaxTiles} 格。"; break; }
+                var tiles = BatchMove.Tiles(area).ToArray();
+                if (ReservedByOther(session, tiles) is string conflict) { reply.Message = conflict; break; }
+                if (tiles.Any(t => !session.Unchanged(t, true) || !session.Unchanged(t, false))
+                    || request.Expected != DescribeArea(moves.Farm, area))
+                {
+                    foreach (var t in tiles) session.Observe(t);
+                    moves.Cancel(); reply.Message = "选区已发生变化，请等同步后重新框选。"; break;
+                }
+                reply.Message = moves.SelectBatch(area);
+                break;
+            }
+            case "PlaceBatch":
+            {
+                if (moves.Batch == null) { reply.Message = "请重新框选需要搬移的区域。"; break; }
+                var plan = moves.Batch.At(tile);
+                if (!BatchMove.ValidArea(moves.Farm, plan.DestinationArea)) { reply.Message = "整组选区超出农场边界。"; break; }
+                if (ReservedByOther(session, plan.Affected) is string conflict) { reply.Message = conflict; break; }
+                var targetTiles = BatchMove.Tiles(plan.DestinationArea).ToArray();
+                if (targetTiles.Any(t => !session.Unchanged(t, true) || !session.Unchanged(t, false))
+                    || request.Expected != DescribeArea(moves.Farm, plan.DestinationArea))
+                {
+                    foreach (var t in targetTiles) session.Observe(t);
+                    reply.Message = "目标区域已发生变化，整批未搬移；请等同步后再次确认。"; break;
+                }
+                int before = moves.UndoCount;
+                reply.Message = moves.PlaceBatch(tile);
+                if (moves.UndoCount > before)
+                {
+                    LayoutChanged(session);
+                    foreach (var changed in moves.LastChanged) session.Observe(changed);
+                }
+                break;
+            }
             case "Select":
                 if (!moves.Farm.isTileOnMap(tile)) { reply.Message = "超出农场边界。"; break; }
                 if (ReservedByOther(session, new[] { tile }) is string selectConflict) { reply.Message = selectConflict; break; }
@@ -314,8 +358,7 @@ internal sealed class GardenNetwork
         var affected = tiles.ToHashSet();
         foreach (var other in sessions.Values)
             if (other.Player != session.Player && ReferenceEquals(other.Moves.Farm, session.Moves.Farm)
-                && other.Moves.Source is Vector2 source && affected.Contains(source)
-                && other.Moves.Selected?.IsAt(other.Moves.Farm, source) == true)
+                && other.Moves.ReservedTiles.Any(affected.Contains))
                 return "这格已被其他玩家选中，请选择别处，或等对方放下 / 取消。";
         return null;
     }
@@ -330,9 +373,24 @@ internal sealed class GardenNetwork
     }
     private static void PopulateReply(HostSession session, GardenReply reply)
     {
-        reply.Selected = session.Moves.Selected != null;
+        reply.Selected = session.Moves.HasSelection;
+        reply.Batch = session.Moves.Batch != null;
+        if (session.Moves.Batch is { } batch)
+        { reply.X = batch.Area.X; reply.Y = batch.Area.Y; reply.Width = batch.Area.Width; reply.Height = batch.Area.Height; }
         if (session.Moves.Source is Vector2 selected) { reply.X = (int)selected.X; reply.Y = (int)selected.Y; }
         reply.UndoCount = session.Moves.UndoCount;
+    }
+    internal static string DescribeArea(Farm farm, Rectangle area)
+    {
+        if (!BatchMove.ValidArea(farm, area)) return "";
+        var description = new StringBuilder();
+        foreach (var tile in BatchMove.Tiles(area))
+            foreach (bool objects in new[] { false, true })
+            {
+                string value = Describe(farm, tile, objects);
+                description.Append(value.Length).Append(':').Append(value).Append(';');
+            }
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(description.ToString())));
     }
     internal static string Describe(Farm farm, Vector2 tile, bool? objectLayer = null)
     {

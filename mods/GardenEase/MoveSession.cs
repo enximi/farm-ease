@@ -11,14 +11,21 @@ internal sealed class MoveSession
     internal Farm Farm { get; }
     internal Vector2? Source { get; private set; }
     internal ArrangeItem? Selected { get; private set; }
+    internal BatchMove? Batch { get; private set; }
+    internal bool HasSelection => Selected != null || Batch != null;
+    internal IEnumerable<Vector2> ReservedTiles => Batch != null
+        ? Batch.Entries.Where(e => e.Item.IsAt(Farm, e.From)).Select(e => e.From).Distinct()
+        : Source is Vector2 source && Selected?.IsAt(Farm, source) == true ? new[] { source } : Array.Empty<Vector2>();
     internal Vector2[] LastChanged { get; private set; } = Array.Empty<Vector2>();
     private readonly Farmer actor;
     private readonly HashSet<NetMutex> ownedLocks = new();
     private readonly Stack<Move> undo = new();
-    private sealed record Move(Vector2 From, Vector2 To, ArrangeItem Item, ArrangeItem? Swapped);
+    private sealed record Move(Vector2 From, Vector2 To, ArrangeItem? Item, ArrangeItem? Swapped, BatchMove? Batch = null)
+    {
+        internal Vector2[] Tiles => Batch?.Affected ?? new[] { From, To };
+    }
     internal int UndoCount => undo.Count;
-    internal Vector2[] UndoTiles => Selected == null && undo.TryPeek(out var move)
-        ? new[] { move.From, move.To } : Array.Empty<Vector2>();
+    internal Vector2[] UndoTiles => !HasSelection && undo.TryPeek(out var move) ? move.Tiles : Array.Empty<Vector2>();
     private bool undoInvalidated;
     internal MoveSession(Farm farm, Farmer? actor = null) { Farm = farm; this.actor = actor ?? Game1.player; }
 
@@ -26,7 +33,7 @@ internal sealed class MoveSession
     {
         // Another editor owns the newer layout. Even if an object is moved back
         // later, an old undo must not reverse that player's work.
-        var retained = undo.Where(move => !changed.Contains(move.From) && !changed.Contains(move.To)).ToArray();
+        var retained = undo.Where(move => !move.Tiles.Any(changed.Contains)).ToArray();
         if (retained.Length == undo.Count) return;
         undoInvalidated = true;
         undo.Clear();
@@ -46,6 +53,27 @@ internal sealed class MoveSession
         Source = tile;
         Selected = item;
         return $"已选中{item.Name}，移动光标后确认。";
+    }
+
+    internal string SelectBatch(Rectangle area)
+    {
+        Cancel();
+        string result = BatchMove.Select(Farm, area, out var batch);
+        Batch = batch;
+        return result;
+    }
+    internal BatchMove.Check CheckBatch(Vector2 target) => Batch?.At(target).Validate(Farm, actor)
+        ?? new("请先框选需要搬移的区域。", new());
+    internal string PlaceBatch(Vector2 target)
+    {
+        if (Batch == null) return "请先框选需要搬移的区域。";
+        var plan = Batch.At(target);
+        if (plan.Validate(Farm, actor).Reason is string reason) return reason + " 整批未搬移。";
+        plan.Transfer(Farm, actor);
+        LastChanged = plan.Affected;
+        undo.Push(new Move(plan.Origin, target, null, null, plan.Reverse(Farm)));
+        Cancel();
+        return $"已整体搬移 {plan.Entries.Length} 个对象，状态保留；可一步撤销。";
     }
 
     internal ArrangeItem? SwapTarget(Vector2 tile)
@@ -131,16 +159,25 @@ internal sealed class MoveSession
     internal string Undo(out Vector2? restored)
     {
         restored = null;
-        if (Selected != null) { Cancel(); return "已取消当前选中；再次按撤销可恢复上一步。"; }
+        if (HasSelection) { Cancel(); return "已取消当前选中；再次按撤销可恢复上一步。"; }
         if (!undo.TryPeek(out Move? move)) return undoInvalidated
             ? "相关位置已被其他玩家整理，旧撤销记录已失效。" : "当前整理会话还没有搬移记录。";
-        if (!move.Item.IsAt(Farm, move.To) || !ReferenceEquals(move.Item.At(Farm, move.From), move.Swapped?.Value)
+        if (move.Batch is { } batch)
+        {
+            if (batch.Validate(Farm, actor).Reason is string batchReason) return "整批暂时无法撤销：" + batchReason;
+            batch.Transfer(Farm, actor);
+            LastChanged = batch.Affected;
+            undo.Pop(); restored = move.From;
+            return $"已撤销整批搬移，恢复 {batch.Entries.Length} 个对象的位置。";
+        }
+        var item = move.Item!;
+        if (!item.IsAt(Farm, move.To) || !ReferenceEquals(item.At(Farm, move.From), move.Swapped?.Value)
             || (move.Swapped != null && !move.Swapped.IsAt(Farm, move.From)))
             return "对象位置发生变化，无法安全撤销。";
-        if (InvalidPlacement(move.From, move.Item, move.Swapped) is string reason) return "原位置暂时无法恢复：" + reason;
-        if (move.Swapped != null && InvalidPlacement(move.To, move.Swapped, move.Item) is string otherReason)
+        if (InvalidPlacement(move.From, item, move.Swapped) is string reason) return "原位置暂时无法恢复：" + reason;
+        if (move.Swapped != null && InvalidPlacement(move.To, move.Swapped, item) is string otherReason)
             return "另一格暂时无法恢复：" + otherReason;
-        Transfer(move.To, move.From, move.Item, move.Swapped);
+        Transfer(move.To, move.From, item, move.Swapped);
         undo.Pop();
         restored = move.From;
         return move.Swapped == null ? "已恢复上一次搬移。" : "已撤销交换，两格均已恢复。";
@@ -223,5 +260,5 @@ internal sealed class MoveSession
         }
     }
 
-    internal void Cancel() { Source = null; Selected = null; }
+    internal void Cancel() { Source = null; Selected = null; Batch = null; }
 }

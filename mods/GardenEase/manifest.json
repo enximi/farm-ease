@@ -1,7 +1,7 @@
 {
   "Name": "Garden Ease · 田园巧整",
   "Author": "zzz",
-  "Version": "1.4.1",
+  "Version": "1.5.0",
   "Description": "作物、树木、道路与设施搬移及交换，树上采集器随树移动，保留果实、箱子内容与加工进度；农场随心统一入口。",
   "UniqueID": "zzz.GardenEase",
   "EntryDll": "GardenEase.dll",

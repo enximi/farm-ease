@@ -6,13 +6,29 @@ namespace GardenEase;
 
 internal static class CoverageOverlay
 {
+    internal sealed record Area(HashSet<Vector2> Tiles, Color Color);
     internal static string Hint(ArrangeItem? item) => item?.Object is not { } obj ? ""
         : obj.IsSprinkler() ? "蓝色：洒水范围（含喷头加成）"
         : obj.IsScarecrow() ? "金色：稻草人保护范围" : "";
 
     internal static void Draw(SpriteBatch b, Farm farm, ArrangeItem? item, Vector2 center, bool valid, bool secondary = false)
     {
-        if (item?.Object is not { } obj) return;
+        if (Footprint(farm, item, center) is { } area) DrawArea(b, area, valid, secondary);
+    }
+    internal static Area[] BatchAreas(Farm farm, IEnumerable<BatchMove.Entry> entries)
+    {
+        var areas = new Dictionary<Color, HashSet<Vector2>>();
+        foreach (var entry in entries)
+            if (Footprint(farm, entry.Item, entry.To) is { } area)
+            {
+                if (!areas.TryGetValue(area.Color, out var tiles)) areas[area.Color] = tiles = new();
+                tiles.UnionWith(area.Tiles);
+            }
+        return areas.Select(pair => new Area(pair.Value, pair.Key)).ToArray();
+    }
+    private static Area? Footprint(Farm farm, ArrangeItem? item, Vector2 center)
+    {
+        if (item?.Object is not { } obj) return null;
         var tiles = new HashSet<Vector2>();
         Color color;
         if (obj.IsSprinkler())
@@ -41,7 +57,13 @@ internal static class CoverageOverlay
                     if (Vector2.DistanceSquared(tile, center) < (float)radius * radius) tiles.Add(tile);
                 }
         }
-        else return;
+        else return null;
+        return new(tiles, color);
+    }
+    internal static void DrawArea(SpriteBatch b, Area area, bool valid, bool secondary = false)
+    {
+        var tiles = area.Tiles;
+        Color color = area.Color;
         if (!valid) color = new Color(244, 107, 99);
         float opacity = secondary ? 0.55f : 1;
         foreach (Vector2 tile in tiles)

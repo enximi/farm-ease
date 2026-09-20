@@ -25,6 +25,13 @@ public sealed class ModEntry : Mod
         {
             if (e.OldMenu is ArrangeMenu menu && !ReferenceEquals(e.OldMenu, e.NewMenu)) menu.RestoreCamera();
         };
+        helper.Events.Input.ButtonPressed += (_, e) =>
+        {
+            if (Game1.activeClickableMenu is ArrangeMenu menu && e.Button is SButton.B or SButton.ControllerY)
+            { helper.Input.Suppress(e.Button); menu.ToggleBatch(); }
+        };
+        helper.Events.Input.CursorMoved += (_, e) =>
+        { if (Game1.activeClickableMenu is ArrangeMenu menu) menu.MoveMouse(e); };
         helper.ConsoleCommands.Add("gardenease", "直接进入田园巧整整理模式。", (_, _) => OpenArrange());
     }
     public override object GetApi() => Menu.PublicApi;
