@@ -16,15 +16,16 @@ public sealed class ModEntry : Mod
     internal StorageNetwork Network { get; private set; } = null!;
     internal StorageAccess Access { get; private set; } = null!;
     internal StorageCrafting Crafting { get; private set; } = null!;
+    internal StorageTabs Tabs { get; private set; } = null!;
     private bool ready;
     internal bool InRange => ready && Context.IsWorldReady && !Game1.eventUp && !Game1.isFestival()
         && !Game1.fadeToBlack && Game1.locationRequest == null && Game1.player.health > 0
         && (Config.Anywhere || StorageCatalog.InComfortArea());
-    internal bool HasStorageScreen => Game1.activeClickableMenu is StorageBrowser || Access.Busy || StorageCrafting.CurrentPage != null;
+    internal bool HasStorageScreen => Game1.activeClickableMenu is StorageBrowser || Access.Busy || Tabs.IsOpen || StorageCrafting.CurrentPage != null;
     public override void Entry(IModHelper helper)
     {
         Reload();
-        Network = new(this); Access = new(this); Crafting = new(this);
+        Network = new(this); Access = new(this); Crafting = new(this); Tabs = new(this);
         Menu = new(this, Reload, Register);
         StoragePatches.Mod = this;
         var harmony = new Harmony(ModManifest.UniqueID);
@@ -33,14 +34,16 @@ public sealed class ModEntry : Mod
         helper.Events.GameLoop.UpdateTicked += (_, _) =>
         {
             if (!Context.IsWorldReady || !ready) return;
-            try { Network.Tick(); Access.Tick(); }
+            try { Network.Tick(); Access.Tick(); Tabs.Tick(); }
             catch (Exception error) { Access.Release(); Report(error); }
         };
+        helper.Events.Input.ButtonPressed += (_, e) => Tabs.OnButton(e);
+        helper.Events.Display.RenderedActiveMenu += (_, e) => Tabs.Draw(e.SpriteBatch);
         helper.Events.Player.Warped += (_, e) => { if (e.IsLocalPlayer) Access.Release(); };
         helper.Events.GameLoop.Saving += (_, _) => Access.Release();
         helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
         {
-            Access.Reset();
+            Access.Reset(); Tabs.Reset();
             if (Context.IsMainPlayer) configurations.ResetAllScreens(); else configurations.Value = null;
         };
         helper.ConsoleCommands.Add("storageease", "打开随取随用仓储页面。", (_, _) => Menu.Hub?.Open("storage"));

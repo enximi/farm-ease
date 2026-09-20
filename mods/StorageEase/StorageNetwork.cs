@@ -45,6 +45,7 @@ internal sealed class StorageNetwork
     private const string RequestType = "Storage.Request.v1", ResponseType = "Storage.Response.v1";
     private const string DeltaType = "Storage.Delta.v1";
     private static readonly System.Reflection.FieldInfo MultiplayerField = AccessTools.Field(typeof(Game1), "multiplayer");
+    private static readonly System.Reflection.FieldInfo MutexOwnerField = AccessTools.Field(typeof(NetMutex), "owner");
     internal static Multiplayer GameNetwork => (Multiplayer)MultiplayerField.GetValue(null)!;
     private readonly ModEntry mod;
     private bool saving;
@@ -99,7 +100,7 @@ internal sealed class StorageNetwork
             {
                 states.Value.Message = "房主与使用者需要安装相同版本的随取随用。";
                 states.Value.Refreshed = Environment.TickCount64;
-                states.Value.Boxes.Clear(); acquired?.Invoke(false); return;
+                states.Value.Boxes = new(); acquired?.Invoke(false); return;
             }
         }
         var state = states.Value;
@@ -112,7 +113,8 @@ internal sealed class StorageNetwork
         if (leaseBoxes != null)
         {
             request.Action = "Lease"; request.Boxes = leaseBoxes.Select(b => b.Id).ToArray();
-            state.Lease = request.Token; state.Acquired = acquired;
+            if (state.Lease.Length == 0) state.Lease = request.Token;
+            request.Lease = state.Lease; state.Acquired = acquired;
         }
         state.Pending = request.Token; state.SentAt = Environment.TickCount64;
         if (Context.IsMainPlayer) incoming.Enqueue((Game1.player.UniqueMultiplayerID, request));
@@ -141,8 +143,9 @@ internal sealed class StorageNetwork
         long now = Environment.TickCount64;
         if (Loading && now - state.SentAt > 15000)
         {
-            state.Pending = ""; state.Boxes.Clear(); state.Message = "等待房主超时，请刷新仓储列表。";
-            var acquired = state.Acquired; state.Acquired = null; acquired?.Invoke(false); ReleaseLease();
+            state.Pending = ""; state.Boxes = new(); state.Message = "等待房主超时，请刷新仓储列表。";
+            var acquired = state.Acquired; state.Acquired = null; acquired?.Invoke(false);
+            if (!mod.Access.Busy) ReleaseLease();
         }
         if (!Loading && mod.InRange && mod.HasStorageScreen && now - state.Refreshed > 5000) Refresh();
     }
@@ -179,7 +182,11 @@ internal sealed class StorageNetwork
         if (leases.TryGetValue(player, out var held) && held.Id == request.Lease) held.LastSeen = Environment.TickCount64;
         if (request.Action == "Release")
         {
-            if (held?.Id == request.Lease) held.Closing = true;
+            if (held?.Id == request.Lease)
+            {
+                held.Closing = true;
+                if (held.Chests.All(chest => !chest.GetMutex().IsLocked())) leases.Remove(player);
+            }
             return;
         }
         if (saving)
@@ -189,17 +196,27 @@ internal sealed class StorageNetwork
         bool granted = false;
         if (request.Action == "Lease")
         {
+            if (!Guid.TryParseExact(request.Lease, "N", out _)) return;
             var available = StorageCatalog.List(player);
             var boxes = request.Boxes.Distinct().Select(id => available.FirstOrDefault(b => b.Id == id)).ToArray();
             if (boxes.Length == 0 || boxes.Any(b => b == null || !(request.Field == "craft" ? b.Craft : b.Remote)))
                 message = "箱子权限已变化，请刷新后重试。";
-            else if (held != null) message = "上一次箱子操作尚未释放，请稍后重试。";
+            else if (held != null && (held.Id != request.Lease || held.Closing)) message = "上一次箱子操作尚未释放，请稍后重试。";
             else
             {
                 var chests = boxes.Select(b => StorageCatalog.Resolve(b!)).ToList();
-                if (chests.Any(c => c == null || !StorageCatalog.Available(c) || c.GetMutex().IsLocked()))
+                bool OwnedByActor(NetMutex mutex) => ((Netcode.NetLong)MutexOwnerField.GetValue(mutex)!).Value == player;
+                if (chests.Any(c => c == null || !StorageCatalog.Available(c) || (c.GetMutex().IsLocked() && !OwnedByActor(c.GetMutex()))))
                     message = "需要的箱子正在使用或位置已变化，请稍后重试。";
-                else { leases[player] = new Lease(player, request.Token, chests.Select(c => c!).ToList()); granted = true; }
+                else
+                {
+                    // During a tab switch, protect both the source lock and the
+                    // requested destination. The client releases the source only
+                    // after opening the destination; later requests trim old locks.
+                    var retained = held?.Chests.Where(c => OwnedByActor(c.GetMutex())) ?? Enumerable.Empty<StardewValley.Objects.Chest>();
+                    leases[player] = new Lease(player, request.Lease, retained.Concat(chests.Select(c => c!)).Distinct().ToList());
+                    granted = true;
+                }
             }
         }
         if (request.Action == "Set")
