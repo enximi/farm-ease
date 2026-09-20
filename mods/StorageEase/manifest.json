@@ -1,0 +1,10 @@
+{
+  "Name": "Storage Ease · 随取随用",
+  "Author": "zzz",
+  "Version": "1.0.0",
+  "Description": "随地访问自己的或已共享的箱子，制作时自动取材；支持舒适模式、箱子权限与多人使用锁，农场随心统一入口。",
+  "UniqueID": "zzz.StorageEase",
+  "EntryDll": "StorageEase.dll",
+  "MinimumApiVersion": "4.5.2",
+  "UpdateKeys": []
+}

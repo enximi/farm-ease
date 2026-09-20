@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+.work/
+dist/
+.DS_Store
+__pycache__/
+*.py[cod]
+mods/*/config.json
+.farm-ease-menu.json

@@ -1,0 +1,10 @@
+{
+  "Name": "Fishing Ease · 从容钓鱼",
+  "Author": "zzz",
+  "Version": "0.3.0",
+  "Description": "扩大绿色条，给予失误补救时间，减缓进度损失和触底反弹，保留追鱼操作与原版成长。",
+  "UniqueID": "zzz.FishingEase",
+  "EntryDll": "FishingEase.dll",
+  "MinimumApiVersion": "4.5.2",
+  "UpdateKeys": []
+}
