@@ -44,7 +44,7 @@ internal sealed class MoveSession
     {
         // A tree and its tapper move together. Other objects take priority over ground.
         var item = ArrangeItem.Read(Farm, tile);
-        if (item == null) return "请选择耕地、树木、果树、道路或支持的农场设施。";
+        if (item == null) return "请选择耕地、牧草、树木、果树、道路或支持的农场设施。";
         if (item.UnavailableReason() is string reason) return reason;
         if (HasLargeTerrain(tile)) return "这格上有大型地形，暂不能搬移。";
         CollisionMask mask = CollisionMask.All & ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring | CollisionMask.Farmers);
@@ -109,7 +109,7 @@ internal sealed class MoveSession
         if (incoming.UnavailableReason(ownedLocks) is string unavailable) return unavailable;
         if (outgoing?.UnavailableReason(ownedLocks) is string outgoingUnavailable) return outgoingUnavailable;
         if (!ReferenceEquals(incoming.At(Farm, tile), outgoing?.Value))
-            return "这里已有其他对象；耕地、树木、道路和设施只能在各自类别内交换。";
+            return "这里已有其他对象；耕地、牧草、树木、道路和设施只能在各自类别内交换。";
         if (outgoing != null && !outgoing.IsAt(Farm, tile)) return "目标对象或树上采集器已发生变化，请重新选择。";
         if (HasLargeTerrain(tile)) return "这里有大型地形，不能放置。";
         if (!Farm.isTilePlaceable(tile, incoming.PassableFor(actor))) return "这里不能放置，可能是水域或地图限制区域。";
@@ -128,9 +128,9 @@ internal sealed class MoveSession
         }
         else if (incoming.ObjectLayer)
         {
-            // Only empty dirt and flooring may remain underneath a moved object.
+            // Keep passable ground (including protected pasture under fences).
             if (Farm.terrainFeatures.TryGetValue(tile, out var ground)
-                && !(ground.GetType() == typeof(Flooring) || (ground.GetType() == typeof(HoeDirt) && ((HoeDirt)ground).crop == null)))
+                && !ArrangeItem.AllowsObject(ground))
                 return "这里有作物、树木或其他地形，请先移开。";
             mask &= ~(CollisionMask.Objects | CollisionMask.TerrainFeatures | CollisionMask.Flooring);
         }

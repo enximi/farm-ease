@@ -404,6 +404,8 @@ internal sealed class GardenNetwork
         if (objectLayer != false && farm.objects.TryGetValue(tile, out var obj)) return obj.GetType().FullName + ":" + obj.QualifiedItemId;
         if (objectLayer == true) return "";
         if (!farm.terrainFeatures.TryGetValue(tile, out var terrain)) return "";
+        if (terrain is StardewValley.TerrainFeatures.Grass grass)
+            return terrain.GetType().FullName + ":" + grass.grassType.Value + ":" + grass.numberOfWeeds.Value;
         return terrain.GetType().FullName + ":" + (terrain is StardewValley.TerrainFeatures.Flooring floor ? floor.whichFloor.Value
             : terrain is StardewValley.TerrainFeatures.HoeDirt dirt ? dirt.crop?.indexOfHarvest.Value ?? "" : "");
     }

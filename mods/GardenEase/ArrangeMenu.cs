@@ -30,7 +30,7 @@ internal sealed class ArrangeMenu : EaseMenu
     private Point lastViewportPosition;
     private Point layoutSize;
     private bool cameraRestored;
-    private string message = "选择作物、树木、道路或农场设施，按确认开始整理。";
+    private string message = "选择作物、牧草、树木、道路或农场设施，按确认开始整理。";
     private Rectangle top, bottom;
 
     internal ArrangeMenu(ModEntry mod, Farm farm) : base(mod.Menu)

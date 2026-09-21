@@ -22,6 +22,7 @@ internal sealed class ArrangeItem
     internal bool PassableFor(Farmer actor) => Value is TerrainFeature terrain ? terrain.isPassable(actor) : Object!.isPassable();
     internal string Name => Object?.DisplayName ?? (Value is FruitTree fruitTree ? fruitTree.GetDisplayName() + "果树"
         : Value is Tree ? (Tapper == null ? "树木" : "树木与采集器")
+        : Value is Grass grass ? (grass.grassType.Value == Grass.blueGrass ? "蓝色牧草" : "普通牧草")
         : Value is Flooring ? "道路 / 地板" : Dirt?.crop != null ? "作物与耕地" : "空耕地");
     private ArrangeItem(object value, SObject? tapper = null) { Value = value; Tapper = tapper; }
 
@@ -41,6 +42,7 @@ internal sealed class ArrangeItem
         if (value is HoeDirt dirt && dirt.GetType() == typeof(HoeDirt)
             && (dirt.crop == null || dirt.crop.GetType() == typeof(Crop))) return new(value);
         if (value is Flooring floor && floor.GetType() == typeof(Flooring)) return new(value);
+        if (IsPasture(value)) return new(value!);
         if (value is Fence fence && fence.GetType() == typeof(Fence)) return new(value);
         if (value is Chest chest && chest.GetType() == typeof(Chest) && chest.playerChest.Value && !chest.fridge.Value
             && chest.SpecialChestType is Chest.SpecialChestTypes.None or Chest.SpecialChestTypes.BigChest
@@ -54,7 +56,13 @@ internal sealed class ArrangeItem
 
     internal bool CanSwapWith(ArrangeItem other) => ObjectLayer ? other.ObjectLayer
         : IsTree ? other.IsTree : Value is HoeDirt ? other.Value is HoeDirt
-        : Value is Flooring && other.Value is Flooring;
+        : Value is Grass ? other.Value is Grass : Value is Flooring && other.Value is Flooring;
+
+    internal static bool IsPasture(object? value) => value is Grass grass && grass.GetType() == typeof(Grass)
+        && grass.grassType.Value is Grass.springGrass or Grass.blueGrass;
+
+    internal static bool AllowsObject(TerrainFeature ground) => ground.GetType() == typeof(Flooring)
+        || (ground.GetType() == typeof(HoeDirt) && ((HoeDirt)ground).crop == null) || IsPasture(ground);
 
     internal IEnumerable<NetMutex> Mutexes()
     {
@@ -68,6 +76,8 @@ internal sealed class ArrangeItem
             return "箱子或附属容器正在使用，请关闭后再整理。";
         if (PlacedObject?.isTemporarilyInvisible == true || Value is TerrainFeature { isTemporarilyInvisible: true })
             return "对象正在移动或隐藏，请稍后再整理。";
+        if (Value is Grass grass && (!IsPasture(grass) || grass.numberOfWeeds.Value <= 0))
+            return "牧草已被吃完、割除或发生变化，请重新选择。";
         if (Value is Tree tree && (tree.falling.Value || tree.destroy.Value || tree.health.Value <= -99)
             || Value is FruitTree fruit && (fruit.falling.Value || fruit.destroy || fruit.health.Value <= -99))
             return "树木正在倒下或已被破坏，请稍后重新选择。";
@@ -135,12 +145,26 @@ internal sealed class ArrangeItem
             dirt.crop?.updateDrawMath(tile);
             dirt.updateNeighbors();
         }
+        else if (Value is Grass grass) grass.setUpRandom();
         // Flooring adjacency is updated by the terrain dictionary's add/remove callbacks.
         // Fence connections are calculated from the current object positions when drawn.
     }
 
     internal void DrawPreview(SpriteBatch b, Vector2 tile, Color tint)
     {
+        if (Value is Grass grass)
+        {
+            // Read the native seasonal sprite and current amount without mutating
+            // the live grass, its bite health, or the game's random generator.
+            for (int i = 0; i < Math.Clamp(grass.numberOfWeeds.Value, 0, 4); i++)
+            {
+                Vector2 grassPosition = Game1.GlobalToLocal(Game1.viewport, tile * 64
+                    + new Vector2(i % 2 * 32 + 26, i / 2 * 32 + 40));
+                b.Draw(grass.texture.Value, grassPosition, new Rectangle(i % 3 * 15, grass.grassSourceOffset.Value, 15, 20),
+                    tint * 0.65f, 0, new Vector2(7.5f, 17.5f), 4, SpriteEffects.None, 1);
+            }
+            return;
+        }
         if (IsTree)
         {
             TreePreview.Draw(b, this, tile, tint * 0.65f);

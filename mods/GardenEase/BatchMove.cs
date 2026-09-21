@@ -138,7 +138,7 @@ internal sealed class BatchMove
             }
             else if (item.ObjectLayer)
             {
-                if (ground != null && !(ground.GetType() == typeof(Flooring) || (ground.GetType() == typeof(HoeDirt) && ((HoeDirt)ground).crop == null)))
+                if (ground != null && !ArrangeItem.AllowsObject(ground))
                     Fail(tile, "设施下方有作物、树木或其他地形。");
             }
             else if (obj != null && (!added.ContainsKey((true, tile)) || (item.Dirt?.crop != null)))

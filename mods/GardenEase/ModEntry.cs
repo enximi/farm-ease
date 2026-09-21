@@ -16,7 +16,7 @@ public sealed class ModEntry : Mod
         {
             api.RegisterAction("", "garden.arrange", () => "田园巧整",
                 () => Game1.currentLocation is Farm
-                    ? Context.IsMultiplayer ? "可多人同时整理不同格子，各自撤销；时间继续流逝。" : "搬移或交换作物、树木、道路与设施。支持撤销，整理期间时间暂停。"
+                    ? Context.IsMultiplayer ? "可多人同时整理不同格子，各自撤销；时间继续流逝。" : "搬移或交换作物、牧草、树木、道路与设施。支持撤销，整理期间时间暂停。"
                     : "请先回到农场室外，再开始整理。",
                 OpenArrange, () => Game1.currentLocation is Farm, 20);
         });
