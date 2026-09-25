@@ -56,18 +56,7 @@ public sealed class ModEntry : Mod
         api.RegisterSection("travel.destinations", "travel", "选择目的地", "选择固定落脚区域，自动避开障碍。", 20);
         api.RegisterAction("travel", "travel.return", () => "返回上个位置", () => Travel.CanReturn ? "返回上次传送前的稳定地点。过夜后清空。" : "先使用一次传送，才有可以返回的位置。",
             () => Travel.Return(), () => Travel.CanReturn, 30);
-        api.RegisterAction("travel.destinations", "travel.farm", () => "家门口", () => "回到当前住宅门外，自动避开障碍。", () => Travel.GoHome(), () => true, 0);
-        AddDestination("巴士站", "BusStop", 23, 9, 10);
-        AddDestination("小镇", "Town", 43, 57, 20);
-        AddDestination("海滩", "Beach", 20, 5, 30);
-        AddDestination("山上", "Mountain", 31, 20, 40);
-        AddDestination("矿洞", "Mine", 18, 12, 45);
-        AddDestination("森林", "Forest", 58, 17, 50);
-
-        void AddDestination(string label, string location, int x, int y, int order)
-            => api.RegisterAction("travel.destinations", "travel." + location, () => label,
-                () => $"传送至{label}，不消耗物品，自动检查附近空位。",
-                () => Travel.Go(location, new Vector2(x, y), label), () => true, order);
+        TravelDestinations.Register(api, Travel);
     }
 
     internal bool CanUse(out string reason, bool allowOwnMenu = false)

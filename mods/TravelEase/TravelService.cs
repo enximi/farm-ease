@@ -11,7 +11,8 @@ internal sealed class TravelService
     private readonly PerScreen<Anchor?> anchors = new();
     private Anchor? previous { get => anchors.Value; set => anchors.Value = value; }
     private sealed record Anchor(string Location, Vector2 Tile);
-    private static readonly HashSet<string> StableLocations = new() { "Farm", "FarmHouse", "BusStop", "Town", "Mountain", "Forest", "Beach", "Mine" };
+    private static readonly HashSet<string> StableLocations = new()
+        { "Farm", "FarmHouse", "BusStop", "Town", "Mountain", "Forest", "Beach", "Mine", "Railroad", "Woods", "Desert", "IslandSouth" };
     internal bool CanReturn => previous != null;
     internal TravelService(ModEntry mod) => this.mod = mod;
     internal void Clear() => previous = null;
@@ -30,6 +31,8 @@ internal sealed class TravelService
         if (!mod.CanUse(out string reason, true)) { mod.Notify(reason); return false; }
         try
         {
+            if (TravelDestinations.LockReason(name, near) is string locked)
+            { mod.Notify(locked); return false; }
             // Passive festivals can replace destination maps. Don't choose a landing tile on the wrong map.
             if (name != "Farm" && Game1.netWorldState.Value.ActivePassiveFestivals.Any())
             { mod.Notify("特殊活动期间，暂时只开放回家。"); return false; }
@@ -55,10 +58,20 @@ internal sealed class TravelService
                 {
                     if (Math.Max(Math.Abs(x), Math.Abs(y)) != radius) continue;
                     Vector2 tile = near + new Vector2(x, y);
-                    if (!location.isTileOnMap(tile) || !location.isTilePassable(tile)) continue;
+                    if (!location.isTileOnMap(tile) || location.getTileIndexAt((int)tile.X, (int)tile.Y, "Back") < 0
+                        || !location.isTilePassable(tile)) continue;
+                    if (TravelDestinations.LockReason(location.NameOrUniqueName, tile) != null) continue;
                     if (location.doesTileHaveProperty((int)tile.X, (int)tile.Y, "Water", "Back") != null) continue;
+                    if (location.doesTileHaveProperty((int)tile.X, (int)tile.Y, "TouchAction", "Back") != null) continue;
                     if (location.IsTileOccupiedBy(tile, CollisionMask.All & ~CollisionMask.Farmers)) continue;
                     var bounds = new Rectangle((int)tile.X * 64, (int)tile.Y * 64, 64, 64);
+                    if (location is Forest forest && forest.ShouldTravelingMerchantVisitToday())
+                    {
+                        Point cart = forest.GetTravelingMerchantCartTile();
+                        // The cart bounds aren't populated until visiting Forest.
+                        // Reserve its footprint even when warping in from elsewhere.
+                        if (new Rectangle(cart.X * 64, cart.Y * 64, 8 * 64, 3 * 64).Intersects(bounds)) continue;
+                    }
                     if (location.farmers.Any(farmer => farmer.UniqueMultiplayerID != Game1.player.UniqueMultiplayerID
                         && farmer.GetBoundingBox().Intersects(bounds))) continue;
                     if (location.warps.Any(w => w.X == (int)tile.X && w.Y == (int)tile.Y)) continue;

@@ -1,7 +1,7 @@
 {
   "Name": "Travel Ease · 随心往返",
   "Author": "zzz",
-  "Version": "1.2.1",
+  "Version": "1.3.0",
   "Description": "随心回家、往返各地、一键回床睡觉；通过农场随心统一菜单使用，也可独立安装。",
   "UniqueID": "zzz.TravelEase",
   "EntryDll": "TravelEase.dll",
