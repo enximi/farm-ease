@@ -1,6 +1,15 @@
-# 验证记录 · 2026-09-21
+# 验证记录 · 2026-09-25
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
+
+## TravelEase 1.2.0 一键睡觉 · 2026-09-25
+
+- 在统一菜单首页与随心往返页面注册「一键睡觉」，并提供 `travelease sleep`。查找当前玩家自己的 FarmHouse/Cabin 与玩家床位，原生传送后等待淡入结束，再调用原版 `Sleep_Yes`，沿用结算、夜间事件、存档及多人 ReadyCheckDialog；不直接推进日期或替他人确认。
+- 用户选定 View / Back 长按 1.2 秒睡觉，短按释放时打开原版 QuestLog。独立的分屏长按状态只在自由操作接管，压下时抑制原按键，长按显示进度且仅触发一次；短按在释放时补回任务日志。过场/菜单沿用原键，自定义菜单与回家键优先；失焦、传送、次日、返回标题或刷新配置清理状态。无需修改已有配置文件，新字段使用默认值。
+- 每个分屏独立记录待处理请求，记录玩家、住宅、床位和床种，30 秒超时；到达后重新核对，遇到事件、倒下、床位变化或角色离开则取消。阻止重复请求及等待期间的传送。退出存档或次日清理请求；只识别并关闭原版 Sleep 问题，不确认其他对话或带回调的问题。
+- 核对本机 1.6.15 GameLocation.startSleep/doSleep/answerDialogueAction、FarmHouse.GetPlayerBed、BedFurniture.GetBedSpot、Game1.warpFarmer 和 DialogueBox.closeDialogue 的流程；多人等待的取消和完成交给原版管理。没有新增网络协议或共享菜单源码改动。
+- TravelEase Release 编译零警告、零错误；构建与 dist 的 DLL/manifest/README 一致，Git 差异空白检查通过。DLL SHA-256：`7ff7974962590ed07a9f6cf74846af3d4e6d55ed2263bbdcc2897899c26ee5a7`；构建证据：`.work/verification/travel-sleep-build.json`。
+- 用户保存并退出游戏后，仅更新正式 TravelEase 至 1.2.0，DLL/manifest/README 与构建和 dist 一致；其余 Mod、配置、存档与语言文件共 22 个摘要未变。备份：`.work/backups/travel-sleep-20260925-192111-483732`；安装证据：`.work/verification/travel-sleep-install.json`。未编写测试，未启动或重启游戏；手柄短按/长按及进度显示、实际回床、对话清理、结算存档、多人等待/取消、入屋事件、分屏和 Windows 行为尚未实机验证。
 
 ## GardenEase 1.6.0 牧草整理 · 2026-09-21
 

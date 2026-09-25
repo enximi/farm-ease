@@ -12,6 +12,8 @@ public sealed class ModEntry : Mod
     internal ModConfig Config { get; private set; } = new();
     internal MenuController Menu { get; private set; } = null!;
     internal TravelService Travel { get; private set; } = null!;
+    internal SleepService Sleep { get; private set; } = null!;
+    private SleepShortcut sleepShortcut = null!;
     private sealed class HoldState { internal SButton Button = SButton.None; internal double Elapsed; internal bool Triggered; }
     private readonly PerScreen<HoldState> holds = new(() => new());
     private SButton heldHome { get => holds.Value.Button; set => holds.Value.Button = value; }
@@ -22,17 +24,21 @@ public sealed class ModEntry : Mod
     {
         ReloadConfig();
         Travel = new(this);
+        Sleep = new(this);
+        sleepShortcut = new(this);
         Menu = new(this, ReloadConfig, RegisterMenu);
         helper.Events.Input.ButtonPressed += OnButton;
+        helper.Events.Input.ButtonReleased += (_, e) => sleepShortcut.Release(e.Button);
         helper.Events.GameLoop.UpdateTicked += OnUpdate;
         helper.Events.GameLoop.ReturnedToTitle += (_, _) => ResetSession();
         helper.Events.GameLoop.DayStarted += (_, _) => ResetSession();
-        helper.Events.Player.Warped += (_, e) => { if (e.IsLocalPlayer) ResetHold(); };
+        helper.Events.Player.Warped += (_, e) => { if (e.IsLocalPlayer) { ResetHold(); sleepShortcut.Clear(); } };
         helper.Events.Display.RenderedHud += OnHud;
-        helper.ConsoleCommands.Add("travelease", "随心往返：travelease [reload|home]", (_, args) =>
+        helper.ConsoleCommands.Add("travelease", "随心往返：travelease [reload|home|sleep]", (_, args) =>
         {
             if (args.FirstOrDefault() == "reload") ReloadConfig();
             else if (args.FirstOrDefault() == "home") Travel.GoHome();
+            else if (args.FirstOrDefault() == "sleep") Sleep.Start();
             else Menu.Hub?.Open("travel");
         });
     }
@@ -40,7 +46,11 @@ public sealed class ModEntry : Mod
 
     private void RegisterMenu(IFarmMenuApi api)
     {
-        api.RegisterSection("travel", "", "随心往返", "回家、前往各地，或返回上一次的位置。", 10);
+        api.RegisterSection("travel", "", "随心往返", "回家、前往各地、返回上次位置，或一键回床睡觉。", 10);
+        foreach (string section in new[] { "", "travel" })
+            api.RegisterAction(section, "travel.sleep." + section, () => "一键睡觉",
+                () => "回到自己的床并结束今天；多人时等待其他玩家，可取消等待。",
+                Sleep.Start, () => !Sleep.IsPending, 90);
         api.RegisterAction("travel", "travel.home", () => "回家", () => $"长按 {Ui.Button(Config.HomeButton)} / {Ui.Button(Config.KeyboardHomeButton)} 也可回家，松开取消。",
             () => Travel.GoHome(), () => true, 10);
         api.RegisterSection("travel.destinations", "travel", "选择目的地", "选择固定落脚区域，自动避开障碍。", 20);
@@ -59,13 +69,17 @@ public sealed class ModEntry : Mod
                 () => Travel.Go(location, new Vector2(x, y), label), () => true, order);
     }
 
-    internal bool CanUse(out string reason, bool allowOwnMenu = false) => Menu.CanUse(out reason, allowOwnMenu);
+    internal bool CanUse(out string reason, bool allowOwnMenu = false)
+    {
+        if (Sleep.IsPending) { reason = "正在回床，请等待当前操作完成。"; return false; }
+        return Menu.CanUse(out reason, allowOwnMenu);
+    }
     internal void Notify(string message) => Menu.Notify(message);
     internal void Report(Exception error) => Monitor.Log(error.ToString(), LogLevel.Error);
 
     private void ReloadConfig()
     {
-        try { var next = Helper.ReadConfig<ModConfig>(); next.Normalize(); Config = next; ResetHold(); }
+        try { var next = Helper.ReadConfig<ModConfig>(); next.Normalize(); Config = next; ResetHold(); sleepShortcut?.Clear(); }
         catch (Exception error) { Monitor.Log($"配置读取失败，继续使用原配置：{error.Message}", LogLevel.Warn); }
     }
 
@@ -73,8 +87,10 @@ public sealed class ModEntry : Mod
     {
         // The shared menu owns its shortcuts; a conflicting custom home key never hijacks it.
         if (e.Button == Menu.Settings.MenuButton || e.Button == Menu.Settings.KeyboardMenuButton) return;
+        if (sleepShortcut.Press(e.Button)) { ResetHold(); return; }
         if ((e.Button == Config.HomeButton || e.Button == Config.KeyboardHomeButton) && CanUse(out _))
         {
+            sleepShortcut.Clear();
             Helper.Input.Suppress(e.Button);
             heldHome = e.Button;
             homeElapsed = 0;
@@ -84,6 +100,8 @@ public sealed class ModEntry : Mod
 
     private void OnUpdate(object? sender, UpdateTickedEventArgs e)
     {
+        Sleep.Update();
+        sleepShortcut.Update();
         if (heldHome == SButton.None) return;
         if (!(Helper.Input.IsDown(heldHome) || Helper.Input.IsSuppressed(heldHome)) || !CanUse(out _)) { ResetHold(); return; }
         Helper.Input.Suppress(heldHome);
@@ -93,6 +111,7 @@ public sealed class ModEntry : Mod
 
     private void OnHud(object? sender, RenderedHudEventArgs e)
     {
+        sleepShortcut.Draw(e.SpriteBatch);
         if (heldHome == SButton.None || homeTriggered || homeElapsed <= 0) return;
         int w = 280, x = (Game1.uiViewport.Width - w) / 2, y = Game1.uiViewport.Height - 130;
         e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(x - 16, y - 12, w + 32, 76), Color.Black * 0.8f);
@@ -101,5 +120,5 @@ public sealed class ModEntry : Mod
         e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(x, y + 42, (int)(w * Math.Min(1, homeElapsed / Config.HomeHoldMilliseconds)), 6), Ui.Accent);
     }
     private void ResetHold() { heldHome = SButton.None; homeElapsed = 0; homeTriggered = false; }
-    private void ResetSession() { ResetHold(); Travel.Clear(); }
+    private void ResetSession() { ResetHold(); Travel.Clear(); Sleep.Clear(); sleepShortcut.Clear(); }
 }
