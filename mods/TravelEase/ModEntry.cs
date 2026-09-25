@@ -61,6 +61,7 @@ public sealed class ModEntry : Mod
         AddDestination("小镇", "Town", 43, 57, 20);
         AddDestination("海滩", "Beach", 20, 5, 30);
         AddDestination("山上", "Mountain", 31, 20, 40);
+        AddDestination("矿洞", "Mine", 18, 12, 45);
         AddDestination("森林", "Forest", 58, 17, 50);
 
         void AddDestination(string label, string location, int x, int y, int order)

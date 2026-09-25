@@ -11,7 +11,7 @@ internal sealed class TravelService
     private readonly PerScreen<Anchor?> anchors = new();
     private Anchor? previous { get => anchors.Value; set => anchors.Value = value; }
     private sealed record Anchor(string Location, Vector2 Tile);
-    private static readonly HashSet<string> StableLocations = new() { "Farm", "FarmHouse", "BusStop", "Town", "Mountain", "Forest", "Beach" };
+    private static readonly HashSet<string> StableLocations = new() { "Farm", "FarmHouse", "BusStop", "Town", "Mountain", "Forest", "Beach", "Mine" };
     internal bool CanReturn => previous != null;
     internal TravelService(ModEntry mod) => this.mod = mod;
     internal void Clear() => previous = null;

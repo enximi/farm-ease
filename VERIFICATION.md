@@ -2,6 +2,14 @@
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
+## TravelEase 1.2.1 矿洞目的地 · 2026-09-25
+
+- 「随心往返 → 选择目的地」新增「矿洞」，位于山上之后、森林之前。落点采用本机 1.6.15 Game1 原生矿洞传送使用的 Mine (18,12)，通过现有安全落点搜索避开障碍、其他玩家及出口格；不修改矿层或电梯解锁进度。
+- Mine 入口大厅加入稳定返回点，离开大厅传送后可返回；随机地下矿层继续不记录。沿用原有传送状态限制、特殊活动限制、分屏记录和原生网络同步，无共享菜单或其他 Mod 代码改动。
+- TravelEase Release 编译零警告、零错误，Git 差异空白检查通过。游戏关闭时仅更新 TravelEase 至 1.2.1，构建/dist/正式安装的 DLL、manifest、README 逐字节一致；其他 Mod、配置、存档与语言文件共 22 个摘要未变化。没有生成 ZIP。
+- 备份：`.work/backups/travel-mine-20260925-215212-657762`；证据：`.work/verification/travel-mine-install.json`；DLL SHA-256：`b2b19f4c94560c88595b039deb951c1a6ef780a599d98812dab7deee3b93881a`。
+- 未编写测试，未启动游戏。实际矿洞落点、进出大厅与返回、首次进入事件、多人和分屏行为尚未实机验证。
+
 ## TravelEase 1.2.0 一键睡觉 · 2026-09-25
 
 - 在统一菜单首页与随心往返页面注册「一键睡觉」，并提供 `travelease sleep`。查找当前玩家自己的 FarmHouse/Cabin 与玩家床位，原生传送后等待淡入结束，再调用原版 `Sleep_Yes`，沿用结算、夜间事件、存档及多人 ReadyCheckDialog；不直接推进日期或替他人确认。
