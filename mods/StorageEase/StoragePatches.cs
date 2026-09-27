@@ -3,6 +3,7 @@ using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Menus;
 using StardewValley.Network;
+using StardewValley.Objects;
 
 namespace StorageEase;
 
@@ -11,6 +12,8 @@ internal static class StoragePatches
     internal static ModEntry Mod = null!;
     internal static void Install(Harmony harmony)
     {
+        harmony.Patch(AccessTools.Method(typeof(Chest), nameof(Chest.ShowMenu)),
+            postfix: new HarmonyMethod(typeof(StoragePatches), nameof(ChestOpened)));
         harmony.Patch(AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.isAlwaysActiveLocation)),
             postfix: new HarmonyMethod(typeof(StoragePatches), nameof(AlwaysActive)));
         harmony.Patch(AccessTools.Method(typeof(Multiplayer), "broadcastLocationBytes"),
@@ -22,6 +25,7 @@ internal static class StoragePatches
         harmony.Patch(AccessTools.Method(typeof(CraftingPage), "clickCraftingRecipe"),
             prefix: new HarmonyMethod(typeof(StoragePatches), nameof(Craft)));
     }
+    public static void ChestOpened() => Mod.Access.TrackMenu();
     public static void AlwaysActive(GameLocation location, ref bool __result)
     {
         if (Context.IsWorldReady && !__result && Mod.Network.Subscribed(location)) __result = true;

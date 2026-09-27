@@ -1,6 +1,18 @@
-# 验证记录 · 2026-09-27
+# 验证记录 · 2026-09-28
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
+
+## StorageEase 1.2.0 快捷开箱与箱子锁清理 · 2026-09-28
+
+- 统一菜单的「随取随用」改为直接打开上次箱子。按玩家元数据保存箱子 ID；先刷新目录与权限，再通过既有原生锁打开。首次使用、失去权限、已拆除或失败时回到可搜索列表；等待屏幕可取消。快捷入口退出回到游戏，统一菜单进入则返回首页。
+- 新增长按共享菜单键（默认 L3）500ms 开箱，短按释放时打开原菜单；F7 仍立即开菜单，F9 快捷开箱，可配置为其他键或 None。长按按屏幕记录，仅自由操作时接管，失焦/换地图/过夜/标题/刷新配置清除；原有回家和睡觉快捷键保持其职责。可选 IFarmMenuHoldApi 扩展兼容旧菜单 API，旧提供者未支持时降级保留普通入口及键盘开箱。
+- 箱子标签栏新增「全部箱子」按钮，箱子界面按 L3 / F7 打开列表；保留 LT/RT 与 PageUp/PageDown 换箱。手持物品时拒绝切换到列表。列表新增设置入口（Start / F6），提供原有范围、制作与烹饪取材选项及长按开关。
+- 核对本机 1.6.15 Chest.ShowMenu、grabItemFromInventory、grabItemFromChest、updateWhenCurrentLocation、ItemGrabMenu 整理时的复制构造、IClickableMenu.exitThisMenu 和 NetMutex.Update/ReleaseLock：原生箱子并不在菜单清理时直接解锁，而依赖箱盖后续更新。新增对手动和远程箱子菜单的统一跟踪与退出回调；同箱取放/整理造成的界面重建继续持锁，切箱期间跳过源界面退出释放，目标成功后仅释放旧箱锁。下一帧仍核对菜单上下文，覆盖菜单被替换或异常关闭。
+- 修正房主远程租约保活：关闭中的租约不再按全体在线玩家保活；旧租约只保护对应持锁玩家，不影响后来其他玩家的锁。关闭/过期租约不再因别人正在使用旧箱子而一直保留。客户端释放仍仅操作自己已取得的锁，延迟授权回调沿用取消代次检查；没有增加强制抢锁或按超时无条件解锁。同步超时记录刷新时间，避免立即自动重试使等待界面无法退回列表。
+- 配套更新共享菜单：TravelEase 1.3.1、GardenEase 1.7.1、FishingEase 0.3.1。四个 Release 编译均零警告、零错误；Git 差异空白检查通过。仅更新 dist 文件夹，未生成 ZIP。
+- 确认游戏已退出后安装四个版本，各自 DLL/manifest/README 与源码/构建及 dist 逐字节一致；配置、存档、语言及其他非替换文件共 13 个摘要未变。备份：`.work/backups/storage-quick-locks-20260928-001126-830435`；安装证据：`.work/verification/storage-quick-locks-install.json`。
+- DLL SHA-256：TravelEase `366333df09636f37d5ba8bdc7f3ef86533f249cf91cd8dfb066dc913bd3a80da`；GardenEase `c8d614d89ce35d245b66d2def52518172968501dd4ed0def3cce6652241e0964`；FishingEase `c1baf7d7232384b2430d976197cfd7b95a7499d0bc3b56edb81b3e93a9c0fedc`；StorageEase `8a8945f2ebb89cb6e9cc00170a35cc67bee101bab13b7df7ae122166668b10eb`。
+- 未编写测试，未启动游戏。上述为源码核对、编译和安装证据，未复现用户那一次卡锁现场；手柄短按/长按、等待取消与返回、不同缩放下标签布局、同箱重建、多人关箱后另一玩家接手、延迟授权/重试、断线、跨地图和分屏仍需实机验证。
 
 ## GardenEase 1.7.0 告示牌整理 · 2026-09-27
 

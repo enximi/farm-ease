@@ -13,7 +13,13 @@ public interface IFarmMenuApi
     void Refresh();
 }
 
-public sealed class FarmMenuApi : IFarmMenuApi
+// Optional extension so older menu providers can still expose the normal entry.
+public interface IFarmMenuHoldApi
+{
+    void RegisterMenuHold(string id, Func<string> title, Action execute, Func<bool> enabled, Func<int> milliseconds);
+}
+
+public sealed class FarmMenuApi : IFarmMenuApi, IFarmMenuHoldApi
 {
     private readonly MenuController controller;
     internal FarmMenuApi(MenuController controller) => this.controller = controller;
@@ -23,6 +29,8 @@ public sealed class FarmMenuApi : IFarmMenuApi
         Action execute, Func<bool> enabled, int order)
         => controller.Actions[id] = new(sectionId, id, title, description, execute, enabled, order);
     public void RegisterRefresh(string id, Action refresh) => controller.Refreshers[id] = refresh;
+    public void RegisterMenuHold(string id, Func<string> title, Action execute, Func<bool> enabled, Func<int> milliseconds)
+        => controller.MenuHolds[id] = new(title, execute, enabled, milliseconds);
     public void Open(string sectionId) => controller.Open(sectionId);
     public bool IsOpen() => controller.ActiveMenu is HubPage;
     public void Refresh() => controller.ReloadAll();
@@ -31,3 +39,4 @@ public sealed class FarmMenuApi : IFarmMenuApi
 internal sealed record MenuSection(string Id, string ParentId, string Title, string Description, int Order);
 internal sealed record MenuAction(string SectionId, string Id, Func<string> Title, Func<string> Description,
     Action Execute, Func<bool> Enabled, int Order);
+internal sealed record MenuHold(Func<string> Title, Action Execute, Func<bool> Enabled, Func<int> Milliseconds);

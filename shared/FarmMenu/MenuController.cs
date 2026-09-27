@@ -1,6 +1,8 @@
 using System.Text.Json;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
+using StardewModdingAPI.Utilities;
+using Microsoft.Xna.Framework;
 using StardewValley;
 using StardewValley.Menus;
 
@@ -17,6 +19,15 @@ internal sealed class MenuController
     internal Dictionary<string, MenuSection> Sections { get; } = new();
     internal Dictionary<string, MenuAction> Actions { get; } = new();
     internal Dictionary<string, Action> Refreshers { get; } = new();
+    internal Dictionary<string, MenuHold> MenuHolds { get; } = new();
+    private sealed class Hold
+    {
+        internal SButton Button;
+        internal MenuHold Action = null!;
+        internal double Elapsed;
+        internal bool Triggered;
+    }
+    private readonly PerScreen<Hold?> holds = new();
     private bool nativeReady;
     private readonly string settingsPath;
     private readonly Action reloadFeature;
@@ -33,7 +44,21 @@ internal sealed class MenuController
         ReloadSettings();
         mod.Helper.Events.GameLoop.GameLaunched += (_, _) => Connect(register);
         mod.Helper.Events.Input.ButtonPressed += OnButton;
-        mod.Helper.Events.GameLoop.UpdateTicked += (_, _) => ActiveMenu?.TickInput();
+        mod.Helper.Events.Input.ButtonReleased += (_, e) => ReleaseMenuHold(e.Button);
+        mod.Helper.Events.GameLoop.UpdateTicked += (_, _) => { TickMenuHold(); ActiveMenu?.TickInput(); };
+        mod.Helper.Events.Player.Warped += (_, e) => { if (e.IsLocalPlayer) holds.Value = null; };
+        mod.Helper.Events.GameLoop.DayStarted += (_, _) => holds.Value = null;
+        mod.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => holds.ResetAllScreens();
+        mod.Helper.Events.Display.RenderedHud += (_, e) =>
+        {
+            if (holds.Value is not { Triggered: false } hold || hold.Elapsed < 150) return;
+            int width = 360, x = (Game1.uiViewport.Width - width) / 2, y = Game1.uiViewport.Height - 130;
+            e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(x - 16, y - 12, width + 32, 76), Color.Black * 0.8f);
+            Ui.Text(e.SpriteBatch, hold.Action.Title() + " · 松开打开菜单", x, y, Color.White);
+            e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(x, y + 42, width, 6), Color.Gray);
+            e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(x, y + 42,
+                (int)(width * Math.Min(1, hold.Elapsed / Math.Clamp(hold.Action.Milliseconds(), 250, 2000))), 6), Ui.Accent);
+        };
         mod.Helper.Events.Display.MenuChanged += (_, e) =>
         {
             if (e.OldMenu is GameMenu oldMenu && e.NewMenu is GameMenu newMenu
@@ -80,6 +105,7 @@ internal sealed class MenuController
 
     internal void ReloadSettings()
     {
+        holds.Value = null;
         try
         {
             var next = File.Exists(settingsPath)
@@ -91,6 +117,20 @@ internal sealed class MenuController
             if (!File.Exists(settingsPath)) File.WriteAllText(settingsPath, JsonSerializer.Serialize(next, MenuSettings.JsonOptions));
         }
         catch (Exception error) { Mod.Monitor.Log($"菜单设置读取失败，继续使用原设置：{error.Message}", LogLevel.Warn); }
+    }
+
+    internal void RegisterMenuHold(string id, Func<string> title, Action execute, Func<bool> enabled, Func<int> milliseconds)
+    {
+        try
+        {
+            var api = IsOwner ? PublicApi : Mod.Helper.ModRegistry.GetApi<IFarmMenuHoldApi>(Providers.First(Mod.Helper.ModRegistry.IsLoaded));
+            if (api == null) throw new InvalidOperationException("菜单提供者未支持长按入口。");
+            api.RegisterMenuHold(id, title, execute, enabled, milliseconds);
+        }
+        catch (Exception error)
+        {
+            Mod.Monitor.Log($"长按菜单键入口未启用，请更新同机的农场随心系列 Mod；普通菜单和键盘开箱仍可使用。{error.Message}", LogLevel.Warn);
+        }
     }
 
     internal void ReloadAll()
@@ -145,8 +185,32 @@ internal sealed class MenuController
         else if (IsOwner && (e.Button == Settings.MenuButton || e.Button == Settings.KeyboardMenuButton) && CanUse(out _))
         {
             Mod.Helper.Input.Suppress(e.Button);
-            Open("");
+            var action = e.Button == Settings.MenuButton ? MenuHolds.Values.FirstOrDefault(h => h.Enabled()) : null;
+            if (action != null) holds.Value = new Hold { Button = e.Button, Action = action };
+            else Open("");
         }
+    }
+
+    private void ReleaseMenuHold(SButton button)
+    {
+        if (holds.Value is not { } hold || hold.Button != button) return;
+        holds.Value = null;
+        if (!hold.Triggered && Game1.game1.IsActive && CanUse(out _)) Open("");
+    }
+
+    private void TickMenuHold()
+    {
+        if (holds.Value is not { } hold) return;
+        if (!Mod.Helper.Input.IsDown(hold.Button) && !Mod.Helper.Input.IsSuppressed(hold.Button))
+        { holds.Value = null; return; }
+        Mod.Helper.Input.Suppress(hold.Button);
+        if (hold.Triggered) return;
+        if (!Game1.game1.IsActive || !CanUse(out _) || !hold.Action.Enabled()) { holds.Value = null; return; }
+        hold.Elapsed += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
+        if (hold.Elapsed < Math.Clamp(hold.Action.Milliseconds(), 250, 2000)) return;
+        hold.Triggered = true;
+        try { hold.Action.Execute(); }
+        catch (Exception error) { Mod.Monitor.Log(error.ToString(), LogLevel.Error); Notify("快捷操作失败，请查看 SMAPI 日志。"); }
     }
 
     internal void Notify(string message)

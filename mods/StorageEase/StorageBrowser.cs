@@ -12,6 +12,7 @@ internal sealed class StorageBrowser : IClickableMenu
     private readonly ModEntry mod;
     private readonly TextBox search;
     private Rectangle panel;
+    private Rectangle settings;
     private readonly List<Rectangle> rows = new();
     private readonly List<Rectangle> actions = new();
     private List<BoxInfo> filtered = new();
@@ -33,6 +34,7 @@ internal sealed class StorageBrowser : IClickableMenu
         panel = new((Game1.uiViewport.Width - w) / 2, (Game1.uiViewport.Height - h) / 2, w, h);
         xPositionOnScreen = panel.X; yPositionOnScreen = panel.Y; width = w; height = h;
         initializeUpperRightCloseButton();
+        settings = new(panel.Right - 190, panel.Y + 12, 162, 42);
         search.X = panel.X + 24; search.Y = panel.Y + 62; search.Width = Math.Max(240, w - 200);
         rows.Clear();
         for (int i = 0; i < Math.Max(1, (h - 280) / 62); i++) rows.Add(new(panel.X + 24, panel.Y + 124 + i * 62, w - 48, 58));
@@ -83,6 +85,7 @@ internal sealed class StorageBrowser : IClickableMenu
             case Keys.Left: action = (action + Labels.Length - 1) % Labels.Length; break;
             case Keys.Right: case Keys.Tab: action = (action + 1) % Labels.Length; break;
             case Keys.Enter: Activate(); break;
+            case Keys.F6: OpenSettings(); break;
             case Keys.F: search.Selected = true; Game1.keyboardDispatcher.Subscriber = search; break;
         }
     }
@@ -99,6 +102,7 @@ internal sealed class StorageBrowser : IClickableMenu
             case Buttons.LeftShoulder: Move(-rows.Count); break;
             case Buttons.RightShoulder: Move(rows.Count); break;
             case Buttons.Y: search.Selected = true; Game1.showTextEntry(search); break;
+            case Buttons.Start: OpenSettings(); break;
         }
     }
     private void Move(int amount) { selected = Math.Clamp(selected + amount, 0, Math.Max(0, filtered.Count - 1)); KeepVisible(); }
@@ -106,6 +110,7 @@ internal sealed class StorageBrowser : IClickableMenu
     public override void receiveLeftClick(int x, int y, bool playSound = true)
     {
         if (upperRightCloseButton?.containsPoint(x, y) == true) { Back(); return; }
+        if (settings.Contains(x, y)) { OpenSettings(); return; }
         search.Selected = new Rectangle(search.X, search.Y, search.Width, 48).Contains(x, y);
         if (search.Selected) { Game1.keyboardDispatcher.Subscriber = search; return; }
         for (int i = 0; i < rows.Count; i++) if (rows[i].Contains(x, y) && first + i < filtered.Count) { selected = first + i; return; }
@@ -137,8 +142,13 @@ internal sealed class StorageBrowser : IClickableMenu
     }
     private void Back()
     {
-        if (mod.Access.Busy) mod.Access.Release();
-        exitThisMenu(false); mod.Menu.Hub?.Open("storage");
+        mod.Navigation.Close();
+    }
+    private void OpenSettings()
+    {
+        if (mod.Access.Pending) { mod.Menu.Notify("请先取消或等待当前箱子操作。"); return; }
+        exitThisMenu(false);
+        Game1.activeClickableMenu = new StorageOptionsMenu(mod);
     }
     protected override void cleanupBeforeExit()
     {
@@ -151,6 +161,7 @@ internal sealed class StorageBrowser : IClickableMenu
         b.Draw(Game1.staminaRect, new Rectangle(0, 0, Game1.uiViewport.Width, Game1.uiViewport.Height), Color.Black * 0.45f);
         Ui.Box(b, panel);
         Ui.Text(b, "随取随用 · " + (mod.Config.Anywhere ? "随行模式" : "舒适模式"), panel.X + 24, panel.Y + 18);
+        Ui.Outline(b, settings, Ui.Muted, 1); Ui.Text(b, "设置 · Menu / F6", settings.X + 6, settings.Y + 6);
         search.Draw(b);
         if (search.Text.Length == 0 && !search.Selected) Ui.Text(b, "搜索箱名、地点或箱内物品", search.X + 12, search.Y + 10, Ui.Muted);
         Ui.Text(b, $"{filtered.Count} 个箱子", search.X + search.Width + 16, search.Y + 10, Ui.Muted);

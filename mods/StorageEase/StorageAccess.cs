@@ -19,12 +19,45 @@ internal sealed class StorageAccess
         internal readonly HashSet<NetMutex> Owned = new();
         internal int Generation;
         internal Chest? OpenChest;
+        internal ItemGrabMenu? TrackedMenu;
+        internal bool Switching;
+        internal bool RemoteOpen;
         internal Action? CancelPending;
     }
     private readonly PerScreen<State> states = new(() => new());
     internal bool Busy => Pending || states.Value.OpenChest != null;
     internal bool Pending => states.Value.Pending || states.Value.Polling.Count > 0;
     internal StorageAccess(ModEntry mod) => this.mod = mod;
+    internal static bool IsSupportedMenu(IClickableMenu? current) => current is ItemGrabMenu menu
+        && menu.GetType() == typeof(ItemGrabMenu) && menu.source == ItemGrabMenu.source_chest
+        && menu.context is Chest chest && ReferenceEquals(menu.sourceItem, chest) && StorageCatalog.Supported(chest);
+
+    // Native chests release through lid animation, not ItemGrabMenu.cleanupBeforeExit.
+    // Track physical opens too, and reattach when vanilla rebuilds a menu after moving an item.
+    internal void TrackMenu()
+    {
+        if (!IsSupportedMenu(Game1.activeClickableMenu)) return;
+        var menu = (ItemGrabMenu)Game1.activeClickableMenu;
+        var chest = (Chest)menu.context;
+        var state = states.Value;
+        if (!chest.GetMutex().IsLockHeld() || ReferenceEquals(state.TrackedMenu, menu)) return;
+        if (!ReferenceEquals(state.OpenChest, chest) && !state.Switching) state.RemoteOpen = false;
+        if (state.OpenChest != null && !ReferenceEquals(state.OpenChest.GetMutex(), chest.GetMutex()))
+        {
+            var previous = state.OpenChest.GetMutex();
+            if (state.Owned.Remove(previous) && previous.IsLockHeld()) previous.ReleaseLock();
+        }
+        state.OpenChest = chest; state.TrackedMenu = menu;
+        state.Owned.Add(chest.GetMutex());
+        mod.Navigation.Remember(chest);
+        menu.exitFunction += () =>
+        {
+            if (state.Switching || !ReferenceEquals(state.TrackedMenu, menu)) return;
+            // A same-chest redraw is still the same usage session.
+            if (IsChestMenu(Game1.activeClickableMenu, chest)) return;
+            Release();
+        };
+    }
     internal void Open(BoxInfo info)
     {
         if (!mod.InRange) { mod.Menu.Notify("舒适模式仅在农场或农舍内使用。可以切换随行模式。"); return; }
@@ -35,6 +68,7 @@ internal sealed class StorageAccess
             var chest = StorageCatalog.Resolve(info);
             if (chest == null) { Release(); return; }
             states.Value.OpenChest = chest;
+            states.Value.RemoteOpen = true;
             chest.ShowMenu();
         });
     }
@@ -58,9 +92,15 @@ internal sealed class StorageAccess
             int? selected = menu.currentlySnappedComponent?.myID;
             // Keep the original menu and lock until the destination is granted.
             // Closing the old menu first also runs its native held-item cleanup.
-            menu.exitThisMenu(false);
-            states.Value.OpenChest = chest;
-            chest.ShowMenu();
+            states.Value.Switching = true;
+            try
+            {
+                menu.exitThisMenu(false);
+                states.Value.OpenChest = chest;
+                states.Value.RemoteOpen = true;
+                chest.ShowMenu();
+            }
+            finally { states.Value.Switching = false; }
             foreach (var mutex in states.Value.Owned.Where(m => !ReferenceEquals(m, chest.GetMutex())).ToArray())
             {
                 if (mutex.IsLockHeld()) mutex.ReleaseLock();
@@ -146,9 +186,10 @@ internal sealed class StorageAccess
     internal void Tick()
     {
         var state = states.Value;
+        TrackMenu();
         foreach (var mutex in state.Polling.ToArray()) mutex.Update(Game1.getOnlineFarmers());
         if (state.Pending && (Environment.TickCount64 - state.Started > 15000 || state.StillValid?.Invoke() != true)) state.CancelPending?.Invoke();
-        if (state.OpenChest is { } chest && (!mod.InRange || !StorageCatalog.Available(chest)
+        if (state.OpenChest is { } chest && ((state.RemoteOpen && !mod.InRange) || !StorageCatalog.Available(chest)
             || !chest.GetMutex().IsLockHeld() || !IsChestMenu(Game1.activeClickableMenu, chest)))
         {
             if (IsChestMenu(Game1.activeClickableMenu, chest)) Game1.activeClickableMenu.exitThisMenu();
@@ -160,7 +201,8 @@ internal sealed class StorageAccess
     {
         var state = states.Value;
         state.Generation++;
-        state.Pending = false; state.OpenChest = null; state.CancelPending = null;
+        state.Pending = false; state.OpenChest = null; state.TrackedMenu = null; state.CancelPending = null;
+        state.RemoteOpen = false;
         // Never release another player's lock or a lock owned by a native workbench.
         foreach (var mutex in state.Owned.ToArray()) if (mutex.IsLockHeld()) mutex.ReleaseLock();
         state.Owned.Clear();

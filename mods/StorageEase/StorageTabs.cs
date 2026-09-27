@@ -20,7 +20,7 @@ internal sealed class StorageTabs
         internal List<BoxInfo>? Catalog;
         internal List<BoxInfo> Boxes = new();
         internal readonly List<(Rectangle Bounds, int Index)> Tabs = new();
-        internal Rectangle Bar, Previous, Next;
+        internal Rectangle Bar, Previous, Next, All;
         internal int Selected;
     }
     private readonly PerScreen<State> states = new(() => new());
@@ -68,9 +68,10 @@ internal sealed class StorageTabs
         state.Bar = new Rectangle(x, Math.Max(4, menu.ItemsToGrabMenu.yPositionOnScreen - 44), width, 40);
         state.Previous = new(x, state.Bar.Y, 56, state.Bar.Height);
         state.Next = new(state.Bar.Right - 56, state.Bar.Y, 56, state.Bar.Height);
-        int count = Math.Min(state.Boxes.Count, Math.Clamp((width - 120) / 170, 1, 4));
+        state.All = new(state.Next.X - 148, state.Bar.Y, 144, state.Bar.Height);
+        int count = Math.Min(state.Boxes.Count, Math.Clamp((width - 268) / 170, 1, 4));
         int start = Math.Clamp(state.Selected - count / 2, 0, state.Boxes.Count - count);
-        int tabWidth = (width - 120) / count;
+        int tabWidth = (width - 268) / count;
         state.Tabs.Clear();
         for (int i = 0; i < count; i++)
             state.Tabs.Add((new(x + 60 + i * tabWidth, state.Bar.Y, tabWidth - 4, state.Bar.Height), start + i));
@@ -80,6 +81,12 @@ internal sealed class StorageTabs
         var menu = Current();
         if (menu == null) return;
         Layout(menu);
+        if (e.Button == mod.Menu.Settings.MenuButton || e.Button == mod.Menu.Settings.KeyboardMenuButton)
+        {
+            mod.Helper.Input.Suppress(e.Button);
+            mod.Navigation.ShowBrowser();
+            return;
+        }
         int direction = e.Button switch
         {
             SButton.LeftTrigger or SButton.PageUp => -1,
@@ -99,6 +106,7 @@ internal sealed class StorageTabs
         var state = states.Value;
         if (state.Previous.Contains(x, y)) Cycle(menu, -1);
         else if (state.Next.Contains(x, y)) Cycle(menu, 1);
+        else if (state.All.Contains(x, y)) mod.Navigation.ShowBrowser();
         else foreach (var tab in state.Tabs)
             if (tab.Bounds.Contains(x, y)) { Select(menu, tab.Index); break; }
     }
@@ -123,6 +131,7 @@ internal sealed class StorageTabs
         bool pending = mod.Access.Pending || mod.Network.Loading;
         DrawTab(b, state.Previous, "< LT", false, state.Boxes.Count < 2 || pending);
         DrawTab(b, state.Next, "RT >", false, state.Boxes.Count < 2 || pending);
+        DrawTab(b, state.All, "全部箱子 " + Ui.Button(mod.Menu.Settings.MenuButton), false, false);
         foreach (var (bounds, index) in state.Tabs)
         {
             var box = state.Boxes[index];
@@ -133,7 +142,8 @@ internal sealed class StorageTabs
         int x = Game1.getMouseX(), y = Game1.getMouseY();
         if (state.Bar.Contains(x, y))
         {
-            string hint = "LT / RT · PageUp / PageDown 切换箱子";
+            string hint = state.All.Contains(x, y) ? "全部箱子：搜索、改名、共享与取材设置 · " + Ui.Button(mod.Menu.Settings.KeyboardMenuButton)
+                : "LT / RT · PageUp / PageDown 切换箱子";
             foreach (var (bounds, index) in state.Tabs)
                 if (bounds.Contains(x, y))
                 {

@@ -127,9 +127,16 @@ internal sealed class StorageNetwork
         {
             foreach (var lease in leases.Values.ToArray())
             {
-                foreach (var chest in lease.Chests) chest.GetMutex().Update(Game1.getOnlineFarmers());
+                foreach (var chest in lease.Chests)
+                {
+                    var mutex = chest.GetMutex();
+                    // A closed lease must no longer keep an absent farmer's lock alive.
+                    // Nor may an old lease keep alive a later user's unrelated lock.
+                    if (IsRemoteMutex(mutex)) mutex.Update(Game1.getOnlineFarmers());
+                    else if (chest.Location is { } location) mutex.Update(location);
+                }
                 if ((lease.Closing || Environment.TickCount64 - lease.LastSeen > 30000)
-                    && lease.Chests.All(chest => !chest.GetMutex().IsLocked())) leases.Remove(lease.Player);
+                    && lease.Chests.All(chest => Owner(chest.GetMutex()) != lease.Player)) leases.Remove(lease.Player);
             }
             for (int i = 0; i < 8 && incoming.TryDequeue(out var entry); i++)
                 try { Process(entry.Player, entry.Request); }
@@ -143,7 +150,7 @@ internal sealed class StorageNetwork
         long now = Environment.TickCount64;
         if (Loading && now - state.SentAt > 15000)
         {
-            state.Pending = ""; state.Boxes = new(); state.Message = "等待房主超时，请刷新仓储列表。";
+            state.Pending = ""; state.Refreshed = now; state.Boxes = new(); state.Message = "等待房主超时，请刷新仓储列表。";
             var acquired = state.Acquired; state.Acquired = null; acquired?.Invoke(false);
             if (!mod.Access.Busy) ReleaseLease();
         }
@@ -185,7 +192,7 @@ internal sealed class StorageNetwork
             if (held?.Id == request.Lease)
             {
                 held.Closing = true;
-                if (held.Chests.All(chest => !chest.GetMutex().IsLocked())) leases.Remove(player);
+                if (held.Chests.All(chest => Owner(chest.GetMutex()) != player)) leases.Remove(player);
             }
             return;
         }
@@ -205,7 +212,7 @@ internal sealed class StorageNetwork
             else
             {
                 var chests = boxes.Select(b => StorageCatalog.Resolve(b!)).ToList();
-                bool OwnedByActor(NetMutex mutex) => ((Netcode.NetLong)MutexOwnerField.GetValue(mutex)!).Value == player;
+                bool OwnedByActor(NetMutex mutex) => Owner(mutex) == player;
                 if (chests.Any(c => c == null || !StorageCatalog.Available(c) || (c.GetMutex().IsLocked() && !OwnedByActor(c.GetMutex()))))
                     message = "需要的箱子正在使用或位置已变化，请稍后重试。";
                 else
@@ -291,7 +298,10 @@ internal sealed class StorageNetwork
         if (Context.IsMainPlayer) incoming.Enqueue((Game1.player.UniqueMultiplayerID, request));
         else if (Context.IsWorldReady) mod.Helper.Multiplayer.SendMessage(request, RequestType, new[] { mod.ModManifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
     }
-    internal bool IsRemoteMutex(NetMutex mutex) => leases.Values.Any(lease => lease.Chests.Any(chest => ReferenceEquals(chest.GetMutex(), mutex)));
+    private static long Owner(NetMutex mutex) => ((Netcode.NetLong)MutexOwnerField.GetValue(mutex)!).Value;
+    internal bool IsRemoteMutex(NetMutex mutex) => leases.Values.Any(lease => !lease.Closing
+        && (Owner(mutex) == NetMutex.NoOwner || Owner(mutex) == lease.Player)
+        && lease.Chests.Any(chest => ReferenceEquals(chest.GetMutex(), mutex)));
     internal bool Subscribed(GameLocation location) => !Context.IsMainPlayer
         && states.Value.Roots.Contains(location.Root?.Value.NameOrUniqueName ?? location.NameOrUniqueName);
     internal void Forward(GameLocation loc, byte messageType, byte[] bytes)
