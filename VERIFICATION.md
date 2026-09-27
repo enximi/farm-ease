@@ -2,6 +2,15 @@
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
+## 共享菜单长按释放修复 · 2026-09-28
+
+- 用户实机反馈 L3 长短按均打开统一菜单。检查当次 SMAPI 日志，确认已加载 TravelEase 1.3.1、GardenEase 1.7.1、FishingEase 0.3.1、StorageEase 1.2.0；配置 EnableMenuHold=true、MenuHoldMilliseconds=500、MenuButton=LeftStick，未发现长按 API 注册失败，排除未更新及配置关闭。
+- 只读反编译本机 SMAPI 4.5.2 的 SInputState.TrueUpdate/DeriveStates 和 InputHelper：Suppress 把后续对游戏可见的按键状态改为释放，会在仍物理按住时产生 ButtonReleased；IsSuppressed 在实际松开前持续为 true。实际松开时覆盖才清除，通常不会再产生第二次 Released。
+- 原共享菜单订阅 ButtonReleased 并直接执行短按，导致屏蔽后的下一帧提前开菜单。移除该订阅，改为 TickMenuHold 中同时检查 !IsDown && !IsSuppressed 时才结束手势；仍按住则累计时长，触发后只吞掉剩余按住时间，实际释放不再开菜单。失焦、状态变化、换地图、配置重载和各屏独立状态沿用原处理。
+- 四个共享菜单副本统一更新：TravelEase 1.3.2、GardenEase 1.7.2、FishingEase 0.3.2、StorageEase 1.2.1。最终 Release 编译均零警告、零错误；Git 差异空白检查通过。未编写测试，未启动游戏，未生成 ZIP；实际手柄短按/长按及分屏仍待实机确认。
+- 确认游戏退出后安装，各 Mod 的 DLL/manifest/README 在构建、dist 和正式目录逐字节一致；存档、语言、配置及其余文件共 13 个摘要未变。备份：`.work/backups/menu-hold-release-20260928-003426-636369`；证据：`.work/verification/menu-hold-release-install.json`。
+- DLL SHA-256：TravelEase `1f2e91acee9e1d47804a0eb46df28fb902dd5991d68a1b50079bbe213aa1124c`；GardenEase `65c8690a8d9703578ec88a7e0b4b85f66e671f165969dffe243caa8c12af5f93`；FishingEase `5a46981deca08569f7ee85b3758acf8fea1a60bacf0a3fa1f0b17b8e841cacb0`；StorageEase `c12ea793236ae1d2469e1bd224b218254532a7d8ba1e9359437b4cc637b35eee`。
+
 ## StorageEase 1.2.0 快捷开箱与箱子锁清理 · 2026-09-28
 
 - 统一菜单的「随取随用」改为直接打开上次箱子。按玩家元数据保存箱子 ID；先刷新目录与权限，再通过既有原生锁打开。首次使用、失去权限、已拆除或失败时回到可搜索列表；等待屏幕可取消。快捷入口退出回到游戏，统一菜单进入则返回首页。

@@ -44,7 +44,6 @@ internal sealed class MenuController
         ReloadSettings();
         mod.Helper.Events.GameLoop.GameLaunched += (_, _) => Connect(register);
         mod.Helper.Events.Input.ButtonPressed += OnButton;
-        mod.Helper.Events.Input.ButtonReleased += (_, e) => ReleaseMenuHold(e.Button);
         mod.Helper.Events.GameLoop.UpdateTicked += (_, _) => { TickMenuHold(); ActiveMenu?.TickInput(); };
         mod.Helper.Events.Player.Warped += (_, e) => { if (e.IsLocalPlayer) holds.Value = null; };
         mod.Helper.Events.GameLoop.DayStarted += (_, _) => holds.Value = null;
@@ -201,8 +200,12 @@ internal sealed class MenuController
     private void TickMenuHold()
     {
         if (holds.Value is not { } hold) return;
+        // SMAPI derives ButtonReleased from the overridden state: suppressing a
+        // held button produces that event on the next tick, before physical release.
+        // IsSuppressed remains true until the physical button is released, at which
+        // point no second ButtonReleased is guaranteed. Resolve the gesture here.
         if (!Mod.Helper.Input.IsDown(hold.Button) && !Mod.Helper.Input.IsSuppressed(hold.Button))
-        { holds.Value = null; return; }
+        { ReleaseMenuHold(hold.Button); return; }
         Mod.Helper.Input.Suppress(hold.Button);
         if (hold.Triggered) return;
         if (!Game1.game1.IsActive || !CanUse(out _) || !hold.Action.Enabled()) { holds.Value = null; return; }
