@@ -19,7 +19,7 @@ internal sealed class StorageBrowser : IClickableMenu
     private int selected, first, action;
     private string lastQuery = "";
     private long refreshed;
-    private static readonly string[] Labels = { "打开", "远程开关", "取材开关", "改名", "刷新" };
+    private static readonly string[] Labels = { "打开", "远程开关", "取材开关", "刷新" };
     internal StorageBrowser(ModEntry mod)
     {
         this.mod = mod;
@@ -47,7 +47,7 @@ internal sealed class StorageBrowser : IClickableMenu
     {
         string query = search.Text.Trim();
         string? id = selected < filtered.Count ? filtered[selected].Id : null;
-        filtered = mod.Network.Boxes.Where(info => query.Length == 0 || Contains(info.Name, query) || Contains(info.Place, query)
+        filtered = mod.Network.Boxes.Where(info => query.Length == 0 || Contains(StoragePreview.From(info).Name, query) || Contains(info.Place, query)
             || (StorageCatalog.Resolve(info)?.GetItemsForPlayer().Any(item => item != null && Contains(item.DisplayName, query)) == true)).ToList();
         int index = filtered.FindIndex(b => b.Id == id);
         selected = index >= 0 ? index : Math.Clamp(selected, 0, Math.Max(0, filtered.Count - 1));
@@ -120,7 +120,7 @@ internal sealed class StorageBrowser : IClickableMenu
     private void Activate()
     {
         if (mod.Network.Loading || mod.Access.Busy) { mod.Menu.Notify("正在同步仓储，请稍候。"); return; }
-        if (action == 4) { mod.Network.Refresh(); return; }
+        if (action == 3) { mod.Network.Refresh(); return; }
         if (filtered.Count == 0) return;
         BoxInfo info = filtered[selected];
         if (action == 0) { search.Selected = false; mod.Access.Open(info); return; }
@@ -128,14 +128,6 @@ internal sealed class StorageBrowser : IClickableMenu
         {
             case 1: mod.Network.Refresh(info.Id, "remote", (!info.Remote).ToString().ToLowerInvariant()); break;
             case 2: mod.Network.Refresh(info.Id, "craft", (!info.Craft).ToString().ToLowerInvariant()); break;
-            case 3:
-                search.Selected = false;
-                Game1.activeClickableMenu = new NamingMenu(name =>
-                {
-                    Game1.activeClickableMenu = new StorageBrowser(mod);
-                    mod.Network.Refresh(info.Id, "name", name.Trim());
-                }, "箱子名称（最多 32 字）", info.Name);
-                break;
         }
     }
     private void Back()
@@ -161,20 +153,22 @@ internal sealed class StorageBrowser : IClickableMenu
         Ui.Text(b, "随取随用 · " + (mod.Config.Anywhere ? "随行模式" : "舒适模式"), panel.X + 24, panel.Y + 18);
         Ui.Outline(b, settings, Ui.Muted, 1); Ui.Text(b, "设置 · Menu / F6", settings.X + 6, settings.Y + 6);
         search.Draw(b);
-        if (search.Text.Length == 0 && !search.Selected) Ui.Text(b, "搜索箱名、地点或箱内物品", search.X + 12, search.Y + 10, Ui.Muted);
+        if (search.Text.Length == 0 && !search.Selected) Ui.Text(b, "搜索物品或地点", search.X + 12, search.Y + 10, Ui.Muted);
         Ui.Text(b, $"{filtered.Count} 个箱子", search.X + search.Width + 16, search.Y + 10, Ui.Muted);
         for (int i = 0; i < rows.Count && first + i < filtered.Count; i++)
         {
             BoxInfo info = filtered[first + i]; Rectangle r = rows[i];
             if (first + i == selected) { b.Draw(Game1.staminaRect, r, Ui.Accent * 0.28f); Ui.Outline(b, r, Ui.Accent, 2); }
-            string title = $"{info.Name} · {info.Place} ({info.X},{info.Y})";
-            while (title.Length > 0 && Game1.smallFont.MeasureString(title).X > r.Width - 24) title = title[..^1];
-            Ui.Text(b, title, r.X + 10, r.Y + 1);
+            var preview = StoragePreview.From(info);
+            preview.DrawIcon(b, new Rectangle(r.X + 10, r.Y + 9, 36, 36));
+            string title = $"{first + i + 1}. {preview.Name} · {info.Place} ({info.X},{info.Y})";
+            while (title.Length > 0 && Game1.smallFont.MeasureString(title).X > r.Width - 68) title = title[..^1];
+            Ui.Text(b, title, r.X + 56, r.Y + 1);
             string flags = $"远程 {(info.Remote ? "开" : "关")}    取材 {(info.Craft ? "开" : "关")}";
             var chest = StorageCatalog.Resolve(info);
             if (chest == null) flags += "    等待同步";
             else if (chest.GetMutex().IsLocked()) flags += "    操作处理中";
-            Ui.Text(b, flags, r.X + 10, r.Y + 29, Ui.Muted);
+            Ui.Text(b, flags, r.X + 56, r.Y + 29, Ui.Muted);
         }
         if (filtered.Count == 0) Ui.Wrapped(b, mod.Network.Loading ? "正在同步箱子……" : "没有匹配的箱子。所有玩家放置的普通箱子都会列入；可以清空搜索或刷新列表。", new(panel.X + 30, panel.Y + 135, panel.Width - 60, 90), Ui.Muted);
         for (int i = 0; i < actions.Count; i++)

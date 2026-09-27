@@ -51,31 +51,38 @@ internal sealed class StorageTabs
             {
                 // A physically opened remote-disabled chest remains the
                 // current tab, without granting remote access back to that chest.
+                var preview = StoragePreview.From(chest);
                 state.Boxes.Insert(0, new BoxInfo
                 {
-                    Name = chest.modData.TryGetValue(StorageCatalog.Prefix + "name", out var name) ? name : chest.DisplayName,
+                    Name = preview.Name, IconId = preview.IconId,
                     Place = chest.Location?.DisplayName ?? Game1.currentLocation.DisplayName,
                     X = (int)chest.TileLocation.X, Y = (int)chest.TileLocation.Y
                 });
                 state.Selected = 0;
             }
         }
-        int width = Math.Min(Math.Max(menu.ItemsToGrabMenu.width, menu.inventory.width), Game1.uiViewport.Width - 24);
+        int available = Math.Max(1, Math.Min(Math.Max(menu.ItemsToGrabMenu.width, menu.inventory.width), Game1.uiViewport.Width - 24));
+        int arrowWidth = Math.Min(52, available / 8), allWidth = Math.Min(112, available / 4);
+        int room = Math.Max(1, available - 2 * arrowWidth - allWidth - 16);
+        int pitch = Math.Min(68, room);
+        int count = Math.Min(state.Boxes.Count, Math.Max(1, room / pitch));
+        int width = 2 * arrowWidth + allWidth + 16 + count * pitch;
         int x = Math.Clamp(menu.ItemsToGrabMenu.xPositionOnScreen + menu.ItemsToGrabMenu.width / 2 - width / 2,
             12, Math.Max(12, Game1.uiViewport.Width - width - 12));
-        // Use the empty header just above the slots, below the native color picker.
-        // This does not move the inventory or reduce the space available for items.
+        // Fixed compact icon tabs: fewer boxes never stretch into wide labels.
+        // Use the existing header without shifting either inventory.
         state.Bar = new Rectangle(x, Math.Max(4, menu.ItemsToGrabMenu.yPositionOnScreen - 44), width, 40);
-        state.Previous = new(x, state.Bar.Y, 56, state.Bar.Height);
-        state.Next = new(state.Bar.Right - 56, state.Bar.Y, 56, state.Bar.Height);
-        state.All = new(state.Next.X - 148, state.Bar.Y, 144, state.Bar.Height);
-        int count = Math.Min(state.Boxes.Count, Math.Clamp((width - 268) / 170, 1, 4));
+        state.Previous = new(x, state.Bar.Y, arrowWidth, state.Bar.Height);
+        state.Next = new(state.Bar.Right - arrowWidth, state.Bar.Y, arrowWidth, state.Bar.Height);
+        state.All = new(state.Next.X - allWidth - 4, state.Bar.Y, allWidth, state.Bar.Height);
         int start = Math.Clamp(state.Selected - count / 2, 0, state.Boxes.Count - count);
-        int tabWidth = (width - 268) / count;
         state.Tabs.Clear();
         for (int i = 0; i < count; i++)
-            state.Tabs.Add((new(x + 60 + i * tabWidth, state.Bar.Y, tabWidth - 4, state.Bar.Height), start + i));
+            state.Tabs.Add((new(state.Previous.Right + 4 + i * pitch, state.Bar.Y, Math.Max(1, pitch - 4), state.Bar.Height), start + i));
     }
+    private StoragePreview Preview(int index) => index == states.Value.Selected && states.Value.Chest is { } chest
+        ? StoragePreview.From(chest) : StoragePreview.From(states.Value.Boxes[index]);
+
     internal void OnButton(ButtonPressedEventArgs e)
     {
         var menu = Current();
@@ -131,24 +138,31 @@ internal sealed class StorageTabs
         bool pending = mod.Access.Pending || mod.Network.Loading;
         DrawTab(b, state.Previous, "< LT", false, state.Boxes.Count < 2 || pending);
         DrawTab(b, state.Next, "RT >", false, state.Boxes.Count < 2 || pending);
-        DrawTab(b, state.All, "全部箱子 " + Ui.Button(mod.Menu.Settings.MenuButton), false, false);
+        DrawTab(b, state.All, pending ? "同步中…" : "全部箱子", false, false);
         foreach (var (bounds, index) in state.Tabs)
         {
-            var box = state.Boxes[index];
-            string label = $"{index + 1}. {box.Name}";
-            if (index == state.Selected && pending) label = "同步中… " + label;
-            DrawTab(b, bounds, Fit(label, bounds.Width - 18), index == state.Selected, pending && index != state.Selected);
+            bool disabled = pending && index != state.Selected;
+            DrawTab(b, bounds, "", index == state.Selected, disabled);
+            bool showNumber = bounds.Width >= 56;
+            int size = Math.Min(28, Math.Max(1, bounds.Width - (showNumber ? 32 : 12)));
+            int iconX = showNumber ? bounds.X + 6 : bounds.Center.X - size / 2;
+            Preview(index).DrawIcon(b, new Rectangle(iconX, bounds.Center.Y - size / 2, size, size), disabled);
+            if (!showNumber) continue;
+            string number = (index + 1).ToString();
+            float scale = Math.Min(0.65f, 22f / Math.Max(1, Game1.smallFont.MeasureString(number).X));
+            Utility.drawTextWithShadow(b, number, Game1.smallFont, new Vector2(bounds.X + 36, bounds.Y + 10),
+                disabled ? Ui.Muted : Ui.Ink, scale);
         }
         int x = Game1.getMouseX(), y = Game1.getMouseY();
         if (state.Bar.Contains(x, y))
         {
-            string hint = state.All.Contains(x, y) ? "全部箱子：搜索、改名、远程与取材设置 · " + Ui.Button(mod.Menu.Settings.KeyboardMenuButton)
+            string hint = state.All.Contains(x, y) ? "全部箱子：搜索、远程与取材设置 · " + Ui.Button(mod.Menu.Settings.KeyboardMenuButton)
                 : "LT / RT · PageUp / PageDown 切换箱子";
             foreach (var (bounds, index) in state.Tabs)
                 if (bounds.Contains(x, y))
                 {
                     var box = state.Boxes[index];
-                    hint = $"{box.Name} · {box.Place} ({box.X},{box.Y})\n第 {index + 1} / {state.Boxes.Count} 个箱子\n" + hint;
+                    hint = $"{Preview(index).Name} · {box.Place} ({box.X},{box.Y})\n第 {index + 1} / {state.Boxes.Count} 个箱子\n" + hint;
                     break;
                 }
             IClickableMenu.drawHoverText(b, hint, Game1.smallFont);
@@ -165,13 +179,8 @@ internal sealed class StorageTabs
             b.Draw(Game1.staminaRect, new Rectangle(bounds.X + 6, bounds.Bottom - 4, bounds.Width - 12, 3), Ui.Accent);
         }
         // A compact label leaves the native inventory at its original scale.
-        Utility.drawTextWithShadow(b, label, Game1.smallFont, new Vector2(bounds.X + 8, bounds.Y + 8), disabled ? Ui.Muted : Ui.Ink, 0.75f);
-    }
-    private static string Fit(string text, int width)
-    {
-        if (Game1.smallFont.MeasureString(text).X * 0.75f <= width) return text;
-        while (text.Length > 0 && Game1.smallFont.MeasureString(text + "…").X * 0.75f > width) text = text[..^1];
-        return text + "…";
+        float scale = Math.Min(0.75f, Math.Max(1, bounds.Width - 16) / Math.Max(1f, Game1.smallFont.MeasureString(label).X));
+        Utility.drawTextWithShadow(b, label, Game1.smallFont, new Vector2(bounds.X + 8, bounds.Y + 8), disabled ? Ui.Muted : Ui.Ink, scale);
     }
     internal void Reset()
     {

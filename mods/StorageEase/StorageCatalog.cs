@@ -16,6 +16,7 @@ public sealed class BoxInfo
     public int X { get; set; }
     public int Y { get; set; }
     public string Name { get; set; } = "";
+    public string IconId { get; set; } = "";
     public bool Remote { get; set; }
     public bool Craft { get; set; }
 }
@@ -52,12 +53,13 @@ internal static class StorageCatalog
                 chest.modData[Prefix + "id"] = id = Guid.NewGuid().ToString("N");
                 ids.Add(id);
             }
+            var preview = StoragePreview.From(chest);
             result.Add(new BoxInfo
             {
                 Id = id, Location = location.NameOrUniqueName, Structure = location.isStructure.Value,
                 Root = StorageNetwork.GameNetwork.locationRoot(location)?.Value.NameOrUniqueName ?? location.NameOrUniqueName,
                 Place = location.DisplayName, X = (int)chest.TileLocation.X, Y = (int)chest.TileLocation.Y,
-                Name = chest.modData.TryGetValue(Prefix + "name", out var label) ? label : chest.DisplayName,
+                Name = preview.Name, IconId = preview.IconId,
                 Remote = Flag(chest, "remote", true), Craft = Flag(chest, "craft", true)
             });
         }

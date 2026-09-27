@@ -255,8 +255,6 @@ internal sealed class StorageNetwork
                 || leases.Values.Any(l => l.Chests.Any(c => ReferenceEquals(c.GetMutex(), chest.GetMutex())))) message = "箱子正在使用，请稍后修改设置。";
             else if (request.Field is "remote" or "craft" && request.Value is "true" or "false")
             { chest.modData[StorageCatalog.Prefix + request.Field] = request.Value; message = "箱子设置已保存。"; }
-            else if (request.Field == "name" && request.Value.Length is > 0 and <= 32 && !request.Value.Any(char.IsControl))
-            { chest.modData[StorageCatalog.Prefix + "name"] = request.Value; message = "箱子名称已保存。"; }
         }
         var reply = new StorageResponse { Token = request.Token, Message = message, Boxes = StorageCatalog.List(), Granted = granted };
         if (player != Game1.player.UniqueMultiplayerID)
