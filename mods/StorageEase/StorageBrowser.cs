@@ -173,7 +173,7 @@ internal sealed class StorageBrowser : IClickableMenu
             string flags = $"远程 {(info.Remote ? "开" : "关")}    取材 {(info.Craft ? "开" : "关")}";
             var chest = StorageCatalog.Resolve(info);
             if (chest == null) flags += "    等待同步";
-            else if (chest.GetMutex().IsLocked()) flags += "    使用中";
+            else if (chest.GetMutex().IsLocked()) flags += "    操作处理中";
             Ui.Text(b, flags, r.X + 10, r.Y + 29, Ui.Muted);
         }
         if (filtered.Count == 0) Ui.Wrapped(b, mod.Network.Loading ? "正在同步箱子……" : "没有匹配的箱子。所有玩家放置的普通箱子都会列入；可以清空搜索或刷新列表。", new(panel.X + 30, panel.Y + 135, panel.Width - 60, 90), Ui.Muted);

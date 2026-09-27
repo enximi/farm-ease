@@ -30,7 +30,7 @@ internal sealed class StorageCrafting
         {
             var chest = StorageCatalog.Resolve(info);
             if (chest == null || !StorageCatalog.Flag(chest, "craft", true)
-                || !StorageCatalog.Available(chest) || (chest.GetMutex().IsLocked() && !chest.GetMutex().IsLockHeld())) continue;
+                || !StorageCatalog.Available(chest)) continue;
             if (seen.Add(chest.GetItemsForPlayer())) yield return (info, chest);
         }
     }

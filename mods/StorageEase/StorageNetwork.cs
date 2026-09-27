@@ -42,7 +42,7 @@ public sealed class StorageDelta
 // original chest: no item clones, temporary inventories, or changes to save layout.
 internal sealed class StorageNetwork
 {
-    private const string RequestType = "Storage.Request.v1", ResponseType = "Storage.Response.v1";
+    private const string RequestType = "Storage.Request.v2", ResponseType = "Storage.Response.v2";
     private const string DeltaType = "Storage.Delta.v1";
     private static readonly System.Reflection.FieldInfo MultiplayerField = AccessTools.Field(typeof(Game1), "multiplayer");
     private static readonly System.Reflection.FieldInfo MutexOwnerField = AccessTools.Field(typeof(NetMutex), "owner");
@@ -61,15 +61,19 @@ internal sealed class StorageNetwork
     }
     private readonly PerScreen<State> states = new(() => new());
     private readonly Dictionary<long, HashSet<string>> subscriptions = new();
-    private readonly Queue<(long Player, StorageRequest Request)> incoming = new();
+    private readonly Queue<(long Player, StorageRequest Request, long Since)> incoming = new();
+    private readonly Dictionary<string, long> canceled = new();
     private sealed record Lease(long Player, string Id, List<StardewValley.Objects.Chest> Chests)
     {
         internal long LastSeen = Environment.TickCount64;
         internal bool Closing;
+        internal int UnlockedTicks;
     }
     private readonly Dictionary<long, Lease> leases = new();
     internal List<BoxInfo> Boxes => states.Value.Boxes;
     internal bool Loading => states.Value.Pending.Length > 0;
+    internal bool Compatible => Context.IsWorldReady && (Context.IsMainPlayer
+        || mod.Helper.Multiplayer.GetConnectedPlayer(Game1.MasterPlayer.UniqueMultiplayerID)?.GetMod(mod.ModManifest.UniqueID)?.Version.Equals(mod.ModManifest.Version) == true);
     internal string Message => states.Value.Message;
     internal StorageNetwork(ModEntry mod)
     {
@@ -86,7 +90,7 @@ internal sealed class StorageNetwork
         };
         mod.Helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
         {
-            if (Context.IsMainPlayer) { subscriptions.Clear(); incoming.Clear(); leases.Clear(); states.ResetAllScreens(); saving = false; }
+            if (Context.IsMainPlayer) { subscriptions.Clear(); incoming.Clear(); leases.Clear(); canceled.Clear(); states.ResetAllScreens(); saving = false; }
             else states.Value = new();
         };
     }
@@ -117,7 +121,7 @@ internal sealed class StorageNetwork
             request.Lease = state.Lease; state.Acquired = acquired;
         }
         state.Pending = request.Token; state.SentAt = Environment.TickCount64;
-        if (Context.IsMainPlayer) incoming.Enqueue((Game1.player.UniqueMultiplayerID, request));
+        if (Context.IsMainPlayer) incoming.Enqueue((Game1.player.UniqueMultiplayerID, request, Environment.TickCount64));
         else mod.Helper.Multiplayer.SendMessage(request, RequestType, new[] { mod.ModManifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
     }
     internal void Tick()
@@ -135,11 +139,15 @@ internal sealed class StorageNetwork
                     if (IsRemoteMutex(mutex)) mutex.Update(Game1.getOnlineFarmers());
                     else if (chest.Location is { } location) mutex.Update(location);
                 }
+                bool unlocked = lease.Chests.All(chest => Owner(chest.GetMutex()) != lease.Player);
+                lease.UnlockedTicks = unlocked ? lease.UnlockedTicks + 1 : 0;
                 if ((lease.Closing || Environment.TickCount64 - lease.LastSeen > 30000)
-                    && lease.Chests.All(chest => Owner(chest.GetMutex()) != lease.Player)) leases.Remove(lease.Player);
+                    && lease.UnlockedTicks > (Context.IsMultiplayer ? GameNetwork.interpolationTicks() + 2 : 0)) leases.Remove(lease.Player);
             }
-            for (int i = 0; i < 8 && incoming.TryDequeue(out var entry); i++)
-                try { Process(entry.Player, entry.Request); }
+            foreach (var token in canceled.Where(pair => Environment.TickCount64 - pair.Value > 30000).Select(pair => pair.Key).ToArray()) canceled.Remove(token);
+            int count = Math.Min(8, incoming.Count);
+            for (int i = 0; i < count && incoming.TryDequeue(out var entry); i++)
+                try { Process(entry.Player, entry.Request, entry.Since); }
                 catch (Exception error)
                 {
                     mod.Report(error);
@@ -162,7 +170,7 @@ internal sealed class StorageNetwork
         try
         {
             if (e.Type == RequestType && Context.IsMainPlayer && incoming.Count < 64)
-                incoming.Enqueue((e.FromPlayerID, e.ReadAs<StorageRequest>()));
+                incoming.Enqueue((e.FromPlayerID, e.ReadAs<StorageRequest>(), Environment.TickCount64));
             else if (e.Type == ResponseType && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
                 Accept(e.ReadAs<StorageResponse>());
             else if (e.Type == DeltaType && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
@@ -178,7 +186,7 @@ internal sealed class StorageNetwork
         }
         catch (Exception error) { mod.Report(error); }
     }
-    private void Process(long player, StorageRequest request)
+    private void Process(long player, StorageRequest request, long since)
     {
         if (!Guid.TryParseExact(request.Token, "N", out _) || request.KnownRoots.Length > 256) return;
         var actor = Game1.getOnlineFarmers().FirstOrDefault(f => f.UniqueMultiplayerID == player);
@@ -189,13 +197,11 @@ internal sealed class StorageNetwork
         if (leases.TryGetValue(player, out var held) && held.Id == request.Lease) held.LastSeen = Environment.TickCount64;
         if (request.Action == "Release")
         {
-            if (held?.Id == request.Lease)
-            {
-                held.Closing = true;
-                if (held.Chests.All(chest => Owner(chest.GetMutex()) != player)) leases.Remove(player);
-            }
+            canceled[player + ":" + request.Lease] = Environment.TickCount64;
+            if (held?.Id == request.Lease) { held.Closing = true; held.UnlockedTicks = 0; }
             return;
         }
+        if (request.Action == "Lease" && canceled.ContainsKey(player + ":" + request.Lease)) return;
         if (saving)
         {
             Reply(player, new StorageResponse { Token = request.Token, Message = "正在保存，请稍后使用仓储。" }); return;
@@ -206,32 +212,47 @@ internal sealed class StorageNetwork
             if (!Guid.TryParseExact(request.Lease, "N", out _)) return;
             var available = StorageCatalog.List();
             var boxes = request.Boxes.Distinct().Select(id => available.FirstOrDefault(b => b.Id == id)).ToArray();
-            if (boxes.Length == 0 || boxes.Any(b => b == null || !(request.Field == "craft" ? b.Craft : b.Remote)))
+            bool physical = request.Field == "physical";
+            if (boxes.Length == 0 || boxes.Length > 256 || boxes.Any(b => b == null
+                || (!physical && !(request.Field == "craft" ? b.Craft : b.Remote))))
                 message = "箱子已移走或相关开关已关闭，请刷新后重试。";
-            else if (held != null && (held.Id != request.Lease || held.Closing)) message = "上一次箱子操作尚未释放，请稍后重试。";
             else
             {
                 var chests = boxes.Select(b => StorageCatalog.Resolve(b!)).ToList();
-                bool OwnedByActor(NetMutex mutex) => Owner(mutex) == player;
-                if (chests.Any(c => c == null || !StorageCatalog.Available(c) || (c.GetMutex().IsLocked() && !OwnedByActor(c.GetMutex()))))
-                    message = "需要的箱子正在使用或位置已变化，请稍后重试。";
+                if (chests.Any(c => c == null || !StorageCatalog.Available(c))) message = "箱子已移动，请刷新后重试。";
+                else if (physical && chests.Any(c => !ReferenceEquals(c!.Location, actor.currentLocation)
+                    || Microsoft.Xna.Framework.Vector2.Distance(c.TileLocation, actor.Tile) > 3))
+                    message = "请走近箱子后再操作。";
                 else
                 {
-                    // During a tab switch, protect both the source lock and the
-                    // requested destination. The client releases the source only
-                    // after opening the destination; later requests trim old locks.
-                    var retained = held?.Chests.Where(c => OwnedByActor(c.GetMutex())) ?? Enumerable.Empty<StardewValley.Objects.Chest>();
-                    leases[player] = new Lease(player, request.Lease, retained.Concat(chests.Select(c => c!)).Distinct().ToList());
-                    granted = true;
+                    var mutexes = chests.Select(c => c!.GetMutex()).ToHashSet();
+                    bool busy = held != null && (held.Id != request.Lease || held.Closing)
+                        || leases.Values.Any(l => l.Player != player && l.Chests.Any(c => mutexes.Contains(c.GetMutex())))
+                        || mutexes.Any(m => m.IsLocked() && Owner(m) != player);
+                    if (busy && Environment.TickCount64 - since < 14000)
+                    {
+                        // Reserve the entire set atomically; a crafting request
+                        // cannot hold one chest while waiting for another.
+                        incoming.Enqueue((player, request, since));
+                        return;
+                    }
+                    if (busy) message = "等待箱子操作超时，请稍后重试。";
+                    else
+                    {
+                        leases[player] = new Lease(player, request.Lease, chests.Select(c => c!).Distinct().ToList());
+                        granted = true;
+                    }
                 }
             }
         }
+
         if (request.Action == "Set")
         {
             var chest = StorageCatalog.All().Select(pair => pair.Chest).FirstOrDefault(chest =>
                 chest.modData.TryGetValue(StorageCatalog.Prefix + "id", out string id) && id == request.Box);
             if (chest == null) message = "箱子已移走，请刷新后重试。";
-            else if (chest.GetMutex().IsLocked() || chest.mutex.IsLocked()) message = "箱子正在使用，请稍后修改设置。";
+            else if (chest.GetMutex().IsLocked() || chest.mutex.IsLocked()
+                || leases.Values.Any(l => l.Chests.Any(c => ReferenceEquals(c.GetMutex(), chest.GetMutex())))) message = "箱子正在使用，请稍后修改设置。";
             else if (request.Field is "remote" or "craft" && request.Value is "true" or "false")
             { chest.modData[StorageCatalog.Prefix + request.Field] = request.Value; message = "箱子设置已保存。"; }
             else if (request.Field == "name" && request.Value.Length is > 0 and <= 32 && !request.Value.Any(char.IsControl))
@@ -251,6 +272,7 @@ internal sealed class StorageNetwork
                 roots.Add(rootName);
             }
         }
+        if (granted) GameNetwork.UpdateLate(forceSync: true);
         Reply(player, reply);
     }
     private void Reply(long player, StorageResponse response)
@@ -293,9 +315,13 @@ internal sealed class StorageNetwork
     {
         var state = states.Value;
         if (state.Lease.Length == 0) return;
+        if (state.Acquired != null)
+        {
+            state.Acquired = null; state.Pending = ""; state.Refreshed = Environment.TickCount64;
+        }
         var request = new StorageRequest { Token = Guid.NewGuid().ToString("N"), Action = "Release", Lease = state.Lease };
         state.Lease = "";
-        if (Context.IsMainPlayer) incoming.Enqueue((Game1.player.UniqueMultiplayerID, request));
+        if (Context.IsMainPlayer) incoming.Enqueue((Game1.player.UniqueMultiplayerID, request, Environment.TickCount64));
         else if (Context.IsWorldReady) mod.Helper.Multiplayer.SendMessage(request, RequestType, new[] { mod.ModManifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
     }
     private static long Owner(NetMutex mutex) => ((Netcode.NetLong)MutexOwnerField.GetValue(mutex)!).Value;

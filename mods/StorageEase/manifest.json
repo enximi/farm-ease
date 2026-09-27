@@ -1,8 +1,8 @@
 {
   "Name": "Storage Ease · 随取随用",
   "Author": "zzz",
-  "Version": "1.3.0",
-  "Description": "所有玩家共同访问箱子，制作时自动取材；支持快捷开箱、舒适模式与多人使用锁，农场随心统一入口。",
+  "Version": "1.4.0",
+  "Description": "所有玩家共同访问箱子，制作时自动取材；支持多人同箱操作、快捷开箱与舒适模式，农场随心统一入口。",
   "UniqueID": "zzz.StorageEase",
   "EntryDll": "StorageEase.dll",
   "MinimumApiVersion": "4.5.2",
