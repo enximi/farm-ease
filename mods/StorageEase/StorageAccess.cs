@@ -146,7 +146,7 @@ internal sealed class StorageAccess
                 return;
             }
             var chests = boxes.Select(StorageCatalog.Resolve).ToArray();
-            if (chests.Any(c => c == null || !StorageCatalog.Allowed(c, Game1.player.UniqueMultiplayerID)
+            if (chests.Any(c => c == null
                 || !StorageCatalog.Flag(c, crafting ? "craft" : "remote", true) || !StorageCatalog.Available(c)))
             { Cancel(); mod.Menu.Notify("箱子已经变化，请刷新后重试。"); return; }
             state.Requested = chests.Select(c => c!.GetMutex()).Distinct().ToList();
@@ -157,9 +157,8 @@ internal sealed class StorageAccess
                 {
                     if (boxes.Where((box, i) => !ReferenceEquals(StorageCatalog.Resolve(box), chests[i])).Any()
                         || chests.Any(c => !c!.GetMutex().IsLockHeld() || !StorageCatalog.Available(c)
-                            || !StorageCatalog.Allowed(c, Game1.player.UniqueMultiplayerID)
                             || !StorageCatalog.Flag(c, crafting ? "craft" : "remote", true)))
-                    { Cancel(); mod.Menu.Notify("箱子状态或权限已变化，请重试。"); return; }
+                    { Cancel(); mod.Menu.Notify("箱子状态或开关已变化，请重试。"); return; }
                     state.Pending = false;
                     try { complete(); state.CancelPending = null; }
                     catch (Exception error) { mod.Report(error); Release(); mod.Menu.Notify("仓储操作失败，请查看 SMAPI 日志。"); }

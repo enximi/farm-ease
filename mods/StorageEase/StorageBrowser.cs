@@ -19,7 +19,7 @@ internal sealed class StorageBrowser : IClickableMenu
     private int selected, first, action;
     private string lastQuery = "";
     private long refreshed;
-    private static readonly string[] Labels = { "打开", "远程开关", "取材开关", "共享开关", "改名", "刷新" };
+    private static readonly string[] Labels = { "打开", "远程开关", "取材开关", "改名", "刷新" };
     internal StorageBrowser(ModEntry mod)
     {
         this.mod = mod;
@@ -120,17 +120,15 @@ internal sealed class StorageBrowser : IClickableMenu
     private void Activate()
     {
         if (mod.Network.Loading || mod.Access.Busy) { mod.Menu.Notify("正在同步仓储，请稍候。"); return; }
-        if (action == 5) { mod.Network.Refresh(); return; }
+        if (action == 4) { mod.Network.Refresh(); return; }
         if (filtered.Count == 0) return;
         BoxInfo info = filtered[selected];
         if (action == 0) { search.Selected = false; mod.Access.Open(info); return; }
-        if (info.Owner != Game1.player.UniqueMultiplayerID) { mod.Menu.Notify("共享箱子的设置由箱子主人修改。"); return; }
         switch (action)
         {
             case 1: mod.Network.Refresh(info.Id, "remote", (!info.Remote).ToString().ToLowerInvariant()); break;
             case 2: mod.Network.Refresh(info.Id, "craft", (!info.Craft).ToString().ToLowerInvariant()); break;
-            case 3: mod.Network.Refresh(info.Id, "shared", (!info.Shared).ToString().ToLowerInvariant()); break;
-            case 4:
+            case 3:
                 search.Selected = false;
                 Game1.activeClickableMenu = new NamingMenu(name =>
                 {
@@ -172,13 +170,13 @@ internal sealed class StorageBrowser : IClickableMenu
             string title = $"{info.Name} · {info.Place} ({info.X},{info.Y})";
             while (title.Length > 0 && Game1.smallFont.MeasureString(title).X > r.Width - 24) title = title[..^1];
             Ui.Text(b, title, r.X + 10, r.Y + 1);
-            string flags = $"远程 {(info.Remote ? "开" : "关")}    取材 {(info.Craft ? "开" : "关")}    {(info.Shared ? "已共享" : "私人")}";
+            string flags = $"远程 {(info.Remote ? "开" : "关")}    取材 {(info.Craft ? "开" : "关")}";
             var chest = StorageCatalog.Resolve(info);
             if (chest == null) flags += "    等待同步";
             else if (chest.GetMutex().IsLocked()) flags += "    使用中";
             Ui.Text(b, flags, r.X + 10, r.Y + 29, Ui.Muted);
         }
-        if (filtered.Count == 0) Ui.Wrapped(b, mod.Network.Loading ? "正在同步箱子……" : "没有匹配的箱子。自己的普通箱子会自动列入；其他玩家的箱子需要主人开启共享。", new(panel.X + 30, panel.Y + 135, panel.Width - 60, 90), Ui.Muted);
+        if (filtered.Count == 0) Ui.Wrapped(b, mod.Network.Loading ? "正在同步箱子……" : "没有匹配的箱子。所有玩家放置的普通箱子都会列入；可以清空搜索或刷新列表。", new(panel.X + 30, panel.Y + 135, panel.Width - 60, 90), Ui.Muted);
         for (int i = 0; i < actions.Count; i++)
         {
             Rectangle r = actions[i];

@@ -16,10 +16,8 @@ public sealed class BoxInfo
     public int X { get; set; }
     public int Y { get; set; }
     public string Name { get; set; } = "";
-    public long Owner { get; set; }
     public bool Remote { get; set; }
     public bool Craft { get; set; }
-    public bool Shared { get; set; }
 }
 
 internal static class StorageCatalog
@@ -28,10 +26,8 @@ internal static class StorageCatalog
     internal static bool Supported(Chest chest) => chest.GetType() == typeof(Chest) && chest.playerChest.Value
         && !chest.fridge.Value && !chest.giftbox.Value && chest.GlobalInventoryId == null
         && chest.SpecialChestType is Chest.SpecialChestTypes.None or Chest.SpecialChestTypes.BigChest or Chest.SpecialChestTypes.JunimoChest;
-    internal static long Owner(Chest chest) => chest.owner.Value != 0 ? chest.owner.Value : Game1.MasterPlayer.UniqueMultiplayerID;
     internal static bool Flag(Chest chest, string key, bool fallback) => chest.modData.TryGetValue(Prefix + key, out var value)
         ? value == "true" : fallback;
-    internal static bool Allowed(Chest chest, long player) => Owner(chest) == player || Flag(chest, "shared", false);
     internal static bool Available(Chest chest) => !chest.isTemporarilyInvisible && chest.localKickStartTile == null;
     internal static IEnumerable<(GameLocation Location, Chest Chest)> All()
     {
@@ -44,7 +40,7 @@ internal static class StorageCatalog
         }, includeInteriors: true, includeGenerated: false);
         return boxes;
     }
-    internal static List<BoxInfo> List(long player)
+    internal static List<BoxInfo> List()
     {
         var result = new List<BoxInfo>();
         var ids = new HashSet<string>();
@@ -56,14 +52,13 @@ internal static class StorageCatalog
                 chest.modData[Prefix + "id"] = id = Guid.NewGuid().ToString("N");
                 ids.Add(id);
             }
-            if (!Allowed(chest, player)) continue;
             result.Add(new BoxInfo
             {
                 Id = id, Location = location.NameOrUniqueName, Structure = location.isStructure.Value,
                 Root = StorageNetwork.GameNetwork.locationRoot(location)?.Value.NameOrUniqueName ?? location.NameOrUniqueName,
                 Place = location.DisplayName, X = (int)chest.TileLocation.X, Y = (int)chest.TileLocation.Y,
                 Name = chest.modData.TryGetValue(Prefix + "name", out var label) ? label : chest.DisplayName,
-                Owner = Owner(chest), Remote = Flag(chest, "remote", true), Craft = Flag(chest, "craft", true), Shared = Flag(chest, "shared", false)
+                Remote = Flag(chest, "remote", true), Craft = Flag(chest, "craft", true)
             });
         }
         return result.OrderBy(box => box.Place).ThenBy(box => box.Y).ThenBy(box => box.X).ToList();

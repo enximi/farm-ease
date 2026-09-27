@@ -204,10 +204,10 @@ internal sealed class StorageNetwork
         if (request.Action == "Lease")
         {
             if (!Guid.TryParseExact(request.Lease, "N", out _)) return;
-            var available = StorageCatalog.List(player);
+            var available = StorageCatalog.List();
             var boxes = request.Boxes.Distinct().Select(id => available.FirstOrDefault(b => b.Id == id)).ToArray();
             if (boxes.Length == 0 || boxes.Any(b => b == null || !(request.Field == "craft" ? b.Craft : b.Remote)))
-                message = "箱子权限已变化，请刷新后重试。";
+                message = "箱子已移走或相关开关已关闭，请刷新后重试。";
             else if (held != null && (held.Id != request.Lease || held.Closing)) message = "上一次箱子操作尚未释放，请稍后重试。";
             else
             {
@@ -230,14 +230,14 @@ internal sealed class StorageNetwork
         {
             var chest = StorageCatalog.All().Select(pair => pair.Chest).FirstOrDefault(chest =>
                 chest.modData.TryGetValue(StorageCatalog.Prefix + "id", out string id) && id == request.Box);
-            if (chest == null || StorageCatalog.Owner(chest) != player) message = "只能修改自己箱子的设置。";
+            if (chest == null) message = "箱子已移走，请刷新后重试。";
             else if (chest.GetMutex().IsLocked() || chest.mutex.IsLocked()) message = "箱子正在使用，请稍后修改设置。";
-            else if (request.Field is "remote" or "craft" or "shared" && request.Value is "true" or "false")
+            else if (request.Field is "remote" or "craft" && request.Value is "true" or "false")
             { chest.modData[StorageCatalog.Prefix + request.Field] = request.Value; message = "箱子设置已保存。"; }
             else if (request.Field == "name" && request.Value.Length is > 0 and <= 32 && !request.Value.Any(char.IsControl))
             { chest.modData[StorageCatalog.Prefix + "name"] = request.Value; message = "箱子名称已保存。"; }
         }
-        var reply = new StorageResponse { Token = request.Token, Message = message, Boxes = StorageCatalog.List(player), Granted = granted };
+        var reply = new StorageResponse { Token = request.Token, Message = message, Boxes = StorageCatalog.List(), Granted = granted };
         if (player != Game1.player.UniqueMultiplayerID)
         {
             if (!subscriptions.TryGetValue(player, out var roots)) subscriptions[player] = roots = new();

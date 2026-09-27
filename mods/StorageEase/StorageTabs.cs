@@ -49,7 +49,7 @@ internal sealed class StorageTabs
             state.Selected = state.Boxes.FindIndex(box => ReferenceEquals(StorageCatalog.Resolve(box), chest));
             if (state.Selected < 0)
             {
-                // A physically opened private/remote-disabled chest remains the
+                // A physically opened remote-disabled chest remains the
                 // current tab, without granting remote access back to that chest.
                 state.Boxes.Insert(0, new BoxInfo
                 {
@@ -142,7 +142,7 @@ internal sealed class StorageTabs
         int x = Game1.getMouseX(), y = Game1.getMouseY();
         if (state.Bar.Contains(x, y))
         {
-            string hint = state.All.Contains(x, y) ? "全部箱子：搜索、改名、共享与取材设置 · " + Ui.Button(mod.Menu.Settings.KeyboardMenuButton)
+            string hint = state.All.Contains(x, y) ? "全部箱子：搜索、改名、远程与取材设置 · " + Ui.Button(mod.Menu.Settings.KeyboardMenuButton)
                 : "LT / RT · PageUp / PageDown 切换箱子";
             foreach (var (bounds, index) in state.Tabs)
                 if (bounds.Contains(x, y))

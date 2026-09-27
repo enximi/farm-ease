@@ -6,7 +6,7 @@ using StardewValley;
 namespace StorageEase;
 
 // A cancellable waiting screen avoids opening an obsolete cached chest before
-// the host has refreshed permissions and positions.
+// the host has refreshed access switches and positions.
 internal sealed class StorageOpeningMenu : EaseMenu
 {
     private readonly ModEntry mod;

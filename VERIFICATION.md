@@ -2,6 +2,14 @@
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
+## StorageEase 1.3.0 所有玩家共同访问箱子 · 2026-09-28
+
+- 删除 BoxInfo 的 Owner/Shared、StorageCatalog 的 Owner/Allowed 与按玩家筛选目录逻辑。房主发布全部支持的箱子，客户端开箱、Tab 切换、制作预览及实际扣料不再检查放置者或共享标记；仍核对箱子身份、位置、功能开关、材料及原生使用锁。
+- 删除界面的共享开关、私人/已共享标签和箱主专属提示；所有玩家均可给箱子改名、切换远程或取材开关，房主执行时也取消箱主限制。列表操作从六项改为五项，改名与刷新索引同步调整，空列表仍可刷新。关闭的远程/取材开关对所有玩家一致生效。
+- 旧 shared 标记不再读取或写入，旧私人箱子自动纳入全部玩家的目录和取材范围；没有直接修改存档，也未改写原版 owner 或复制库存。原生锁的持有人识别、在线玩家与 Mod 版本校验、共享库存去重及关闭释放机制保留；这次没有共享菜单源码改动。
+- 源码搜索确认运行时代码和 manifest 中不再残留旧的私人/共享开关、Allowed、箱主限制或权限文案。Release 编译零警告、零错误，Git 差异空白检查通过。未编写测试，未启动游戏，未生成 ZIP；跨玩家开箱、旧箱子标记兼容、设置修改、合成扣料、联机与分屏仍未实机验证。
+- 游戏关闭时仅更新 StorageEase 至 1.3.0；DLL/manifest/README 在源码/构建、dist 和正式目录逐字节一致，存档、语言、配置及其他 Mod 共 22 个文件摘要未变。备份：`.work/backups/storage-all-players-20260928-013205-202875`；证据：`.work/verification/storage-all-players-install.json`；DLL SHA-256：`ef860be873c28f47d48848236642ff74b0ffb2667ee45e1a0db146ca40359588`。
+
 ## 共享菜单长按释放修复 · 2026-09-28
 
 - 用户实机反馈 L3 长短按均打开统一菜单。检查当次 SMAPI 日志，确认已加载 TravelEase 1.3.1、GardenEase 1.7.1、FishingEase 0.3.1、StorageEase 1.2.0；配置 EnableMenuHold=true、MenuHoldMilliseconds=500、MenuButton=LeftStick，未发现长按 API 注册失败，排除未更新及配置关闭。

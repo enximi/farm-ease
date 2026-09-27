@@ -29,7 +29,7 @@ internal sealed class StorageCrafting
         foreach (var info in mod.Network.Boxes.Where(box => box.Craft))
         {
             var chest = StorageCatalog.Resolve(info);
-            if (chest == null || !StorageCatalog.Allowed(chest, Game1.player.UniqueMultiplayerID) || !StorageCatalog.Flag(chest, "craft", true)
+            if (chest == null || !StorageCatalog.Flag(chest, "craft", true)
                 || !StorageCatalog.Available(chest) || (chest.GetMutex().IsLocked() && !chest.GetMutex().IsLockHeld())) continue;
             if (seen.Add(chest.GetItemsForPlayer())) yield return (info, chest);
         }
@@ -112,7 +112,7 @@ internal sealed class StorageCrafting
                 foreach (var (info, chest) in selected)
                 {
                     if (!ReferenceEquals(StorageCatalog.Resolve(info), chest) || !chest.GetMutex().IsLockHeld()
-                        || !StorageCatalog.Allowed(chest, Game1.player.UniqueMultiplayerID) || !StorageCatalog.Flag(chest, "craft", true)) return;
+                        || !StorageCatalog.Flag(chest, "craft", true)) return;
                     if (!extras.Contains(chest.GetItemsForPlayer())) extras.Add(chest.GetItemsForPlayer());
                 }
                 page._materialContainers = extras;
