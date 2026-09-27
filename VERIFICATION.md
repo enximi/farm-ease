@@ -1,6 +1,15 @@
-# 验证记录 · 2026-09-26
+# 验证记录 · 2026-09-27
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
+
+## GardenEase 1.7.0 告示牌整理 · 2026-09-27
+
+- 新增原版 Sign（木牌、石牌、金色告示牌）与普通 Object 文字告示牌识别，接入现有单件搬移、设施交换、批量框选和撤销。继续只移动原实例，不重建牌子或展示物品；展示物品、展示类型、原始文字与附属数据随牌保留，撤销不回退其他玩家更新的牌面内容。
+- 物品牌预览只读 ItemRegistry 绘制静态图标；文字牌按 showNextIndex 显示空白/已填写外观。预览不调用实时对象的 draw 或展示物品的 drawInMenu，不改动牌子的真实位置、动画或内容。地图自带装饰路牌和特殊自定义子类不在支持范围内。
+- 源码核对本机 1.6.15 Sign 的 displayItem/displayType 网络字段、Object 的 signText、文字编辑回调和牌子放置分支。沿用现有房主执行、源对象引用复核、格子保留、放置限制及批量冲突检查；房主与参与整理者须统一更新到 1.7.0。
+- GardenEase Release 编译零警告、零错误，Git 差异空白检查通过；构建与 dist 的 DLL、manifest、README 逐字节一致。DLL SHA-256：`59bed3beb8755b9e3ad670c2c6da3c0c7f62c520b0fb935328e31b4e64bdc91e`。未生成 ZIP。
+- 用户保存并退出游戏后，仅更新正式 GardenEase 的 DLL、manifest、README 至 1.7.0，与构建和 dist 逐字节一致；其余 Mod、配置、存档及语言文件共 22 个摘要未变。备份：`.work/backups/garden-signs-20260927-225932-574924`；安装证据：`.work/verification/garden-signs-install.json`。
+- 未编写测试，未启动游戏。牌面预览、搬移/交换/整批撤销、保存加载、多人同时编辑牌面和整理，以及第三方内容兼容性尚未实机验证。
 
 ## TravelEase 1.3.0 分组目的地与解锁条件 · 2026-09-26
 

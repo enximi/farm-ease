@@ -44,12 +44,14 @@ internal sealed class ArrangeItem
         if (value is Flooring floor && floor.GetType() == typeof(Flooring)) return new(value);
         if (IsPasture(value)) return new(value!);
         if (value is Fence fence && fence.GetType() == typeof(Fence)) return new(value);
+        if (value is Sign sign && sign.GetType() == typeof(Sign)) return new(value);
         if (value is Chest chest && chest.GetType() == typeof(Chest) && chest.playerChest.Value && !chest.fridge.Value
             && chest.SpecialChestType is Chest.SpecialChestTypes.None or Chest.SpecialChestTypes.BigChest
                 or Chest.SpecialChestTypes.JunimoChest or Chest.SpecialChestTypes.AutoLoader or Chest.SpecialChestTypes.MiniShippingBin)
             return new(value);
         if (value is SObject obj && obj.GetType() == typeof(SObject) && !obj.IsTapper()
-            && (obj.IsSprinkler() || obj.IsScarecrow() || (obj.bigCraftable.Value && obj.GetMachineData() != null)))
+            && (obj.IsSprinkler() || obj.IsScarecrow() || obj.IsTextSign()
+                || (obj.bigCraftable.Value && obj.GetMachineData() != null)))
             return new(value);
         return null;
     }
@@ -180,9 +182,19 @@ internal sealed class ArrangeItem
         // Draw item data directly: calling object.draw can mutate animation state or
         // read its real location. A preview must never relocate the live instance.
         var data = ItemRegistry.GetDataOrErrorItem(id);
-        Rectangle source = data.GetSourceRect();
+        Rectangle source = data.GetSourceRect(Object is { } obj && obj.IsTextSign() && obj.showNextIndex.Value ? 1 : 0);
         Vector2 position = Game1.GlobalToLocal(Game1.viewport, tile * 64 + new Vector2(32, 64));
         b.Draw(data.GetTexture(), position, source, tint * 0.65f, 0,
             new Vector2(source.Width / 2f, source.Height), 4, SpriteEffects.None, 1);
+        if (Value is Sign { displayItem.Value: { } displayItem })
+        {
+            // A static icon keeps the sign identifiable without invoking item animations.
+            var displayData = ItemRegistry.GetDataOrErrorItem(displayItem.QualifiedItemId);
+            Rectangle displaySource = displayData.GetSourceRect();
+            Vector2 displayPosition = Game1.GlobalToLocal(Game1.viewport, tile * 64 + new Vector2(32, -8));
+            float scale = 48f / Math.Max(displaySource.Width, displaySource.Height);
+            b.Draw(displayData.GetTexture(), displayPosition, displaySource, tint * 0.65f, 0,
+                new Vector2(displaySource.Width / 2f, displaySource.Height / 2f), scale, SpriteEffects.None, 1);
+        }
     }
 }
