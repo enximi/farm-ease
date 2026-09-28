@@ -12,6 +12,7 @@ public sealed class ModEntry : Mod
     public override void Entry(IModHelper helper)
     {
         Network = new(this);
+        helper.Events.World.ObjectListChanged += CampfireSounds.OnObjectsChanged;
         Menu = new(this, () => { }, api =>
         {
             api.RegisterAction("", "garden.arrange", () => "田园巧整",

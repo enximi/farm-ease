@@ -45,6 +45,7 @@ internal sealed class ArrangeItem
         if (IsPasture(value)) return new(value!);
         if (value is Fence fence && fence.GetType() == typeof(Fence)) return new(value);
         if (value is Sign sign && sign.GetType() == typeof(Sign)) return new(value);
+        if (IsCampfire(value)) return new(value!);
         if (value is Chest chest && chest.GetType() == typeof(Chest) && chest.playerChest.Value && !chest.fridge.Value
             && chest.SpecialChestType is Chest.SpecialChestTypes.None or Chest.SpecialChestTypes.BigChest
                 or Chest.SpecialChestTypes.JunimoChest or Chest.SpecialChestTypes.AutoLoader or Chest.SpecialChestTypes.MiniShippingBin)
@@ -62,6 +63,9 @@ internal sealed class ArrangeItem
 
     internal static bool IsPasture(object? value) => value is Grass grass && grass.GetType() == typeof(Grass)
         && grass.grassType.Value is Grass.springGrass or Grass.blueGrass;
+
+    internal static bool IsCampfire(object? value) => value is Torch torch && torch.GetType() == typeof(Torch)
+        && torch.bigCraftable.Value && torch.QualifiedItemId == "(BC)146";
 
     internal static bool AllowsObject(TerrainFeature ground) => ground.GetType() == typeof(Flooring)
         || (ground.GetType() == typeof(HoeDirt) && ((HoeDirt)ground).crop == null) || IsPasture(ground);
@@ -186,6 +190,17 @@ internal sealed class ArrangeItem
         Vector2 position = Game1.GlobalToLocal(Game1.viewport, tile * 64 + new Vector2(32, 64));
         b.Draw(data.GetTexture(), position, source, tint * 0.65f, 0,
             new Vector2(source.Width / 2f, source.Height), 4, SpriteEffects.None, 1);
+        if (IsCampfire(Value) && Object!.IsOn)
+        {
+            // Static native flame frames, without advancing the real torch's animation.
+            for (int i = 0; i < 3; i++)
+            {
+                Vector2 flamePosition = Game1.GlobalToLocal(Game1.viewport,
+                    tile * 64 + new Vector2(i == 1 ? 20 : 12, i == 0 ? -8 : i == 1 ? 0 : 12));
+                b.Draw(Game1.mouseCursors, flamePosition, new Rectangle(276 + i * 12, 1985, 12, 11),
+                    tint * 0.65f, 0, Vector2.Zero, 3, SpriteEffects.None, 1);
+            }
+        }
         if (Value is Sign { displayItem.Value: { } displayItem })
         {
             // A static icon keeps the sign identifiable without invoking item animations.

@@ -2,6 +2,14 @@
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
+## GardenEase 1.8.0 篝火整理 · 2026-09-28
+
+- 将原版篝火 `(BC)146` 的精确 Torch 类型加入整理白名单，复用单件移动、设施交换、批量框选和撤销；火把、火盆、野炊工具与自定义子类未放开。保持原对象、当前点燃状态和附属数据；点燃时预览绘制静态原版火焰，不调用有副作用的真实对象绘制。
+- 只读核对本机 Torch、Object、GameLocation 与 AmbientLocationSounds：篝火属于 Torch 子类；performRemoveAction 会熄灭，placementAction 会重建对象，故均不调用。既有 MoveLights 迁移原网络光源的位置/标识及地图灯光；原生对象位置回调更新碰撞框。
+- 新增当前农场 ObjectListChanged 环境声处理，各安装者按本屏当前地图处理本地及网络同步后的对象变化；按旧字典坐标先移除篝火声音，再按最终布局注册燃烧声，适用于交换、重叠批量和撤销。不参与整理且未安装新版的旁观玩家需重新进入农场刷新环境声。
+- Release 编译零警告、零错误；Git 差异空白检查通过。没有编写测试、启动游戏或生成 ZIP。实际移动、交换、重叠批量、撤销、火焰视觉/声音、保存加载、联机/分屏及异常恢复尚未实机验证。
+- 确认游戏退出后备份并安装，仅替换 GardenEase 的 DLL、manifest、README；构建/dist/正式安装逐字节一致，其他 Mod、配置、存档及语言共 25 个文件摘要未变。备份：`.work/backups/garden-campfires-20260928-203603-876112`；证据：`.work/verification/garden-campfires-install.json`；DLL SHA-256：`2efd952455dbae1d347412ceb9c54fd7b2d92f1e9bbbcac6fd4c19911ddc7f75`。
+
 ## SignEase 0.1.0 一目了然自动告示牌 · 2026-09-28
 
 - 新增独立 SignEase /「一目了然」，默认开启，统一菜单提供房主开关。告示牌位于箱子正上方一格时，以箱内第一个非空且数量大于零的物品设置原版 displayItem/displayType；空箱清空牌面。支持原版木牌、石牌、金色物品牌与普通/石/巨型/祝尼魔箱子，固定地图和建筑内部；文字牌及自定义 Sign/Chest 子类不接管。
