@@ -10,7 +10,7 @@ namespace FarmMenu;
 
 internal sealed class MenuController
 {
-    private static readonly string[] Providers = { "zzz.TravelEase", "zzz.GardenEase", "zzz.FishingEase", "zzz.StorageEase" };
+    private static readonly string[] Providers = { "zzz.TravelEase", "zzz.GardenEase", "zzz.FishingEase", "zzz.StorageEase", "zzz.SignEase" };
     internal Mod Mod { get; }
     internal MenuSettings Settings { get; private set; } = new();
     internal FarmMenuApi PublicApi { get; }

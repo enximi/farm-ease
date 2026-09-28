@@ -24,7 +24,7 @@ fi
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 cd "$project_dir"
-for mod_name in TravelEase GardenEase FishingEase StorageEase; do
+for mod_name in TravelEase GardenEase FishingEase StorageEase SignEase; do
     "$dotnet_bin" build "mods/$mod_name/$mod_name.csproj" -c Release --nologo -p:GamePath="$game_dir"
 done
 python3 scripts/package.py
