@@ -1,6 +1,13 @@
-# 验证记录 · 2026-09-28
+# 验证记录 · 2026-10-04
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
+
+## StorageEase 1.5.1 远程箱子首次点击误报占用 · 2026-10-04
+
+- 用户反馈某些箱子稳定出现第一次点击提示“箱子正在执行其他操作，请重试”、第二次才成功。核对当前 StorageAccess.Acquire 与本机 1.6.15 NetMutex、AbstractNetEvent1 源码：ReleaseLock 清空 owner 和回调但不更新 prevOwner；远程箱子在两次操作之间可能不轮询原生锁，导致旧解锁状态在新 RequestLock 注册回调后才被 Update 处理，误触发本次 onLockFailed。房主同持有者重复请求也可能因为 owner 等于遗留 prevOwner 而漏掉成功回调。此为源码确认的可触发路径，未在用户存档中复现。
+- 在每个新原生锁请求前先调用 Update(在线玩家)，完成旧状态处理，再复核操作代次、待执行状态和界面有效性，随后执行既有持锁判断及 RequestLock。取放、整理、补齐堆叠和远程制作共用此修复；保留房主预留、原生锁、网络插值等待、物品与背包复核、超时取消、迟到回调释放和工作台持锁约定。没有跳过锁或强制清除其他玩家持有的锁。
+- Release 编译零警告、零错误，Git 差异空白检查通过。按项目要求未编写测试、未启动游戏、未生成 ZIP。远程连续取放、左右键/手柄、实际多人/分屏、真实竞争与取消/迟到授权仍需实机确认。最新可读日志加载的是 1.5.0，包含本地分屏记录，但没有本次具体误报的运行跟踪，不能据此认定用户当前会话或实机修复结果。
+- 确认游戏关闭后备份并仅替换 StorageEase 的 DLL、manifest、README；构建/dist/正式安装逐字节一致。其他 Mod、配置、存档及语言共 30 个文件摘要未变。备份：`.work/backups/storage-lock-state-20261004-235435-755245`；证据：`.work/verification/storage-lock-state-install.json`；DLL SHA-256：`c630475e66955797ec0eb8eecc9d95110bd5cc73dca95c98ec74e690789f9086`。
 
 ## GardenEase 1.8.0 篝火整理 · 2026-09-28
 

@@ -193,6 +193,11 @@ internal sealed class StorageAccess
                     return;
                 }
                 var mutex = requested[index];
+                // 远程箱子不一定逐帧更新：释放后 owner 已清空，prevOwner 可能仍是旧玩家。
+                // 必须先处理旧状态，再注册本次回调，否则旧解锁会误触发本次失败回调；
+                // 房主也可能因新旧持有者相同而收不到成功回调。使用在线玩家保留远程操作锁。
+                mutex.Update(Game1.getOnlineFarmers());
+                if (generation != state.Generation || !state.Pending || !valid()) { FinishOperation(); return; }
                 // A native workbench may already own one of these. Never adopt
                 // that lock; the workbench is responsible for its lifetime.
                 if (mutex.IsLockHeld()) { AcquireNext(index + 1); return; }
