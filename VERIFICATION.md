@@ -2,6 +2,14 @@
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
+## RidingEase 0.1.0 悠然骑行 · 2026-10-07
+
+- 新增独立 RidingEase /「悠然骑行」，默认屏蔽马蹄落地震动；接入统一菜单，可保存开关并通过刷新配置重读。本机分屏共用设置，只需使用者安装，不要求房主安装，不读写存档或发送多人消息。
+- 只读核对本机 1.6.15 Horse.PerformDefaultHorseFootstep 与 Rumble：木地、石地和其他地面各有一处 rumble(float,float)，原方法均先判断 rider == Game1.player。Harmony 仅替换这三处调用为可按配置放行的同签名方法，保留原指令标签、异常块、音效与本屏骑手判断；未改全局 Rumble、GamePad.SetVibration 或总震动设置，不逐帧清除震动。调用数量不符时拒绝加载并撤回本 Mod 功能补丁，菜单显示未生效。
+- 菜单候选仅在末尾追加 RidingEase，现有菜单提供者优先顺序不变；可连接已安装五个 Mod 的现有菜单 API，也可单独提供菜单。构建、打包和安装脚本纳入第六个 Mod；本次仅构建与安装 RidingEase，没有重新编译或覆盖其他 Mod。
+- RidingEase Release 编译零警告、零错误；构建脚本 Bash 语法、Python 打包/安装脚本 AST 语法、Git 差异空白检查通过。未编写测试、未启动游戏、未生成 ZIP；Harmony 实际运行加载、真实手柄震动、菜单开关、多人/分屏、Windows 及第三方坐骑兼容性仍需实机确认。
+- 确认游戏关闭后新增正式 Mods/RidingEase，DLL、manifest、README 与构建/dist 逐字节一致；无旧版需覆盖。其他 Mod、配置、存档及语言共 33 个文件摘要未变。证据：`.work/verification/riding-ease-install.json`；DLL SHA-256：`246d73a2e7e3a0ea4ce51f65b8bf3b90608f10ba07120e6d27d3568a69eb505a`。
+
 ## GardenEase 1.8.2 其他搬移对象的本地刷新 · 2026-10-07
 
 - 扩展 CropDisplay 为 LayoutDisplay，保留作物最终坐标绘制刷新；对原版牧草更新本地草丛偏移，对普通树木补齐季节/纹理缓存，对果树加载纹理，按地形加入/移除后的最终布局刷新改动格及周围八格的道路连接。核对原生 Grass.setUpRandom、Tree.performPlayerEntryAction、FruitTree.loadSprite、Flooring.OnAdded，所调用路径不改写生长、草量或随机地板朝向；跳过临时隐藏地形。没有主动调用客户端 HoeDirt.updateNeighbors，因其会间接计算水稻灌溉并可能写联网字段，保留原生耕地回调。

@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-NAMES = ('TravelEase', 'GardenEase', 'FishingEase', 'StorageEase', 'SignEase')
+NAMES = ('TravelEase', 'GardenEase', 'FishingEase', 'StorageEase', 'SignEase', 'RidingEase')
 MENU_KEYS = ('MenuButton', 'KeyboardMenuButton', 'RepeatDelayMilliseconds', 'RepeatIntervalMilliseconds', 'PanelWidth')
 TRAVEL_KEYS = ('HomeButton', 'KeyboardHomeButton', 'HomeHoldMilliseconds')
 parser = argparse.ArgumentParser(description=__doc__)
@@ -79,6 +79,6 @@ with tempfile.TemporaryDirectory(prefix='install-', dir=ROOT / '.work') as tempo
         if created_menu:
             menu_path.unlink(missing_ok=True)
         raise
-print(f'已安装五个独立 Mod：{mods}')
+print(f'已安装 {len(NAMES)} 个独立 Mod：{mods}')
 print(f'旧版本及原配置备份：{backup}')
 print('存档未修改；旧 FarmEase 已移出 Mods，不会重复提供菜单或传送。')

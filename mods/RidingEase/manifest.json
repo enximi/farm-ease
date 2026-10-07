@@ -1,0 +1,10 @@
+{
+  "Name": "Riding Ease · 悠然骑行",
+  "Author": "zzz",
+  "Version": "0.1.0",
+  "Description": "关闭骑马时马蹄落地引起的手柄震动，保留马蹄声和其他震动；农场随心统一入口。",
+  "UniqueID": "zzz.RidingEase",
+  "EntryDll": "RidingEase.dll",
+  "MinimumApiVersion": "4.5.2",
+  "UpdateKeys": []
+}
