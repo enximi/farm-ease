@@ -70,6 +70,20 @@ internal sealed class ArrangeItem
     internal static bool AllowsObject(TerrainFeature ground) => ground.GetType() == typeof(Flooring)
         || (ground.GetType() == typeof(HoeDirt) && ((HoeDirt)ground).crop == null) || IsPasture(ground);
 
+    internal bool HasCollision(Farm farm, Vector2 tile, CollisionMask mask, bool checkPassability = false)
+    {
+        if (IsPasture(Value) && (mask & CollisionMask.Characters) != 0)
+        {
+            // 原版将农场动物与 NPC 合在 Characters 中；牧草只豁免 animals 集合。
+            // 仍按原版规则检查可见 NPC（含宠物、未骑乘的马），其余障碍交给原生判断。
+            var bounds = new Rectangle((int)tile.X * 64, (int)tile.Y * 64, 64, 64);
+            if (farm.characters.Any(character => character != null && !character.IsInvisible
+                && character.GetBoundingBox().Intersects(bounds))) return true;
+            mask &= ~CollisionMask.Characters;
+        }
+        return checkPassability ? farm.IsTileBlockedBy(tile, mask) : farm.IsTileOccupiedBy(tile, mask);
+    }
+
     internal IEnumerable<NetMutex> Mutexes()
     {
         var seen = new HashSet<SObject>();

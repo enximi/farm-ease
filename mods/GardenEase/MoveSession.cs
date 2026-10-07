@@ -49,7 +49,7 @@ internal sealed class MoveSession
         if (HasLargeTerrain(tile)) return "这格上有大型地形，暂不能搬移。";
         CollisionMask mask = CollisionMask.All & ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring | CollisionMask.Farmers);
         if (item.PlacedObject != null) mask &= ~CollisionMask.Objects;
-        if (Farm.IsTileOccupiedBy(tile, mask)) return "这格上还有物体或动物，请先移开。";
+        if (item.HasCollision(Farm, tile, mask)) return "这格上还有物体或动物，请先移开。";
         Source = tile;
         Selected = item;
         return $"已选中{item.Name}，移动光标后确认。";
@@ -139,7 +139,7 @@ internal sealed class MoveSession
         if (incoming.PassableFor(actor)) mask &= ~CollisionMask.Farmers;
         else if (Farm.IsTileOccupiedBy(tile, CollisionMask.Farmers))
             return "这里有角色，挡路的作物或物体不能放在角色脚下。";
-        if (Farm.IsTileBlockedBy(tile, mask)) return "这里有障碍、建筑、物体或动物。";
+        if (incoming.HasCollision(Farm, tile, mask, checkPassability: true)) return "这里有障碍、建筑、物体或动物。";
         return null;
     }
 
@@ -193,7 +193,7 @@ internal sealed class MoveSession
             {
                 CollisionMask sourceMask = CollisionMask.All & ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring | CollisionMask.Farmers);
                 if (item.PlacedObject != null) sourceMask &= ~CollisionMask.Objects;
-                if (HasLargeTerrain(source) || Farm.IsTileOccupiedBy(source, sourceMask))
+                if (HasLargeTerrain(source) || item.HasCollision(Farm, source, sourceMask))
                     throw new InvalidOperationException("原位置出现了障碍或动物，请稍后再试。");
                 if (InvalidPlacement(target, item, swapped) is string reason) throw new InvalidOperationException(reason);
                 if (swapped != null && InvalidPlacement(source, swapped, item) is string otherReason) throw new InvalidOperationException(otherReason);

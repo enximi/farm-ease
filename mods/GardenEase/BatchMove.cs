@@ -66,7 +66,7 @@ internal sealed class BatchMove
         foreach (var entry in entries)
         {
             if (entry.Item.UnavailableReason() is string reason) return $"({(int)entry.From.X},{(int)entry.From.Y})：{reason}";
-            if (farm.IsTileOccupiedBy(entry.From, CollisionMask.All & ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring | CollisionMask.Objects | CollisionMask.Farmers)))
+            if (entry.Item.HasCollision(farm, entry.From, CollisionMask.All & ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring | CollisionMask.Objects | CollisionMask.Farmers)))
                 return "选区内有建筑、动物或其他障碍，请先移开。";
         }
         batch = new(area, entries.ToArray(), Snapshot(farm, entries.Select(e => e.From)));
@@ -104,7 +104,7 @@ internal sealed class BatchMove
         {
             if (!entry.Item.IsAt(farm, entry.From)) Fail(entry.From, "原对象或采集器已变化。");
             if (entry.Item.UnavailableReason(locks) is string unavailable) Fail(entry.From, unavailable);
-            if (LargeTerrain(farm, entry.From) || farm.IsTileOccupiedBy(entry.From,
+            if (LargeTerrain(farm, entry.From) || entry.Item.HasCollision(farm, entry.From,
                 CollisionMask.All & ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring | CollisionMask.Objects | CollisionMask.Farmers)))
                 Fail(entry.From, "原位置有障碍或动物。");
             foreach (var (objects, value) in Components(entry.Item))
@@ -145,7 +145,7 @@ internal sealed class BatchMove
                 Fail(tile, "目标上方有物体；地面只能与选区内设施一起搬移。");
             CollisionMask mask = CollisionMask.All & ~(CollisionMask.Objects | CollisionMask.TerrainFeatures | CollisionMask.Flooring);
             if (item.PassableFor(actor)) mask &= ~CollisionMask.Farmers;
-            if (farm.IsTileBlockedBy(tile, mask)) Fail(tile, "这里有角色、建筑、动物或障碍。");
+            if (item.HasCollision(farm, tile, mask, checkPassability: true)) Fail(tile, "这里有角色、建筑、动物或障碍。");
         }
         return new(first, conflicts);
     }
