@@ -2,6 +2,14 @@
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
+## TravelEase 1.4.0 骑马传送人马同行 · 2026-10-07
+
+- 回家、固定目的地和返回上个位置统一允许稳定骑乘，R3/F8 长按入口同步放开；骑手与马引用不一致或上下马动画中拒绝传送。统一菜单的打开/浏览允许骑马，功能调用默认仍拒绝骑乘，仅传送显式放开；一键睡觉、整理和开箱不随菜单浏览放开。
+- 只读核对本机 Game1.warpFarmer、ShouldDismountOnWarp、Farmer.netMount/update、Horse.update/SyncPositionToRider、Character.GetBoundingBox、GameLocation.resetForPlayerEntry/startEvent 与 GameMenu。原版坐骑保存在玩家 netMount 中并跟随玩家位置/地图；原版在提交室内传送时同步要求下马。新增 MountedTravel，仅在本 Mod 同步提交传送的作用域内，按本屏玩家、坐骑、源地图与目标地图精确匹配，覆盖该次下马判断；finally 清理作用域。没有新建马、重设骑手、改马的归属或释放原生骑乘锁，普通走门及其他传送不在作用域内。若目标触发原版剧情，允许原版在目的地下马。
+- 用原版传送像素落点与马未挤门时的自然碰撞宽度，检查整个覆盖区域；不为预判而临时修改活马坐标。保留原落点边界、水面、设施、角色、触发格、出口、活动与开放条件检查，补充动物跨格碰撞；避开原版会左移的地图最右列。无安全落点时提交前拒绝，人马留在原处。原生网络同步保留，多人只需传送使用者更新；分屏作用域与返回点独立。
+- 只编译和安装 TravelEase，版本 1.4.0。TravelEase 是现有菜单候选中第一顺位，安装新版后提供可在骑马时打开的统一菜单，其他已安装 DLL 不需覆盖。Release 编译零警告、零错误，Git 差异空白检查通过；未编写测试、未启动游戏、未生成 ZIP。Harmony 实际加载、人马到达/下马、矿洞大厅与住宅内返回、无空位、多人与分屏、Windows 及第三方坐骑尚未实机验证。
+- 确认游戏关闭后备份并仅替换 TravelEase 的 DLL、manifest、README；构建/dist/正式安装逐字节一致，其他 Mod、配置、存档及语言共 33 个文件摘要未变。备份：`.work/backups/travel-mounted-20261007-225306-317212`；证据：`.work/verification/travel-mounted-install.json`；DLL SHA-256：`768bc584ac7b229ac59b5917194de5eb21abeb1fed360c88de488e3d260d4b04`。
+
 ## RidingEase 0.1.0 悠然骑行 · 2026-10-07
 
 - 新增独立 RidingEase /「悠然骑行」，默认屏蔽马蹄落地震动；接入统一菜单，可保存开关并通过刷新配置重读。本机分屏共用设置，只需使用者安装，不要求房主安装，不读写存档或发送多人消息。
