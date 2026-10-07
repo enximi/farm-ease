@@ -1,4 +1,4 @@
-# 随心往返 / Travel Ease 1.4.0
+# 随心往返 / Travel Ease 1.4.1
 
 独立的快捷传送与回床睡觉 Mod，目标环境 Stardew Valley 1.6.15 + SMAPI 4.5.2。
 

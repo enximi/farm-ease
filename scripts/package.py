@@ -6,7 +6,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / 'dist'
-MODS = ('TravelEase', 'GardenEase', 'FishingEase', 'StorageEase', 'SignEase', 'RidingEase')
+MODS = ('TravelEase', 'GardenEase', 'FishingEase', 'StorageEase', 'SignEase', 'RidingEase', 'HorseEase')
 DIST.mkdir(exist_ok=True)
 package_files = []
 for name in MODS:

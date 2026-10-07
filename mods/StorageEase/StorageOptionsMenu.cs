@@ -7,6 +7,7 @@ namespace StorageEase;
 
 internal sealed class StorageOptionsMenu : EaseMenu
 {
+    protected override bool AllowMounted => true;
     private readonly ModEntry mod;
     private Rectangle panel;
     private readonly List<Rectangle> rows = new();

@@ -24,10 +24,10 @@ internal sealed class StorageNavigation
     internal BoxInfo? LastBox() => Game1.player.modData.TryGetValue(LastChestKey, out string id)
         ? mod.Network.Boxes.FirstOrDefault(box => box.Id == id && box.Remote) : null;
 
-    internal bool CanQuickOpen() => mod.InRange && !mod.Access.Busy && mod.Menu.CanUse(out _);
+    internal bool CanQuickOpen() => mod.InRange && !mod.Access.Busy && mod.Menu.CanUse(out _, allowMounted: true);
     internal void OpenLast(bool fromHub)
     {
-        if (!mod.Menu.CanUse(out string reason, true)) { mod.Menu.Notify(reason); return; }
+        if (!mod.Menu.CanUse(out string reason, true, allowMounted: true)) { mod.Menu.Notify(reason); return; }
         if (mod.Access.Busy) { mod.Menu.Notify("正在结束上一次箱子操作，请稍候。"); return; }
         Game1.activeClickableMenu?.exitThisMenu(false);
         states.Value = new State { Active = true, ReturnToHub = fromHub };
@@ -61,7 +61,7 @@ internal sealed class StorageNavigation
     {
         bool returnToHub = states.Value.Active && states.Value.ReturnToHub;
         states.Value = new();
-        if (returnToHub && Game1.activeClickableMenu == null && mod.Menu.CanUse(out _)) mod.Menu.Hub?.Open("");
+        if (returnToHub && Game1.activeClickableMenu == null && mod.Menu.CanUse(out _, allowMounted: true)) mod.Menu.Hub?.Open("");
     }
     internal void Tick()
     {

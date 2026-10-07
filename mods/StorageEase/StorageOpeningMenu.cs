@@ -9,6 +9,7 @@ namespace StorageEase;
 // the host has refreshed access switches and positions.
 internal sealed class StorageOpeningMenu : EaseMenu
 {
+    protected override bool AllowMounted => true;
     private readonly ModEntry mod;
     private bool requested;
     internal StorageOpeningMenu(ModEntry mod) : base(mod.Menu) => this.mod = mod;

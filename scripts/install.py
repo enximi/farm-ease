@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-NAMES = ('TravelEase', 'GardenEase', 'FishingEase', 'StorageEase', 'SignEase', 'RidingEase')
+NAMES = ('TravelEase', 'GardenEase', 'FishingEase', 'StorageEase', 'SignEase', 'RidingEase', 'HorseEase')
 MENU_KEYS = ('MenuButton', 'KeyboardMenuButton', 'RepeatDelayMilliseconds', 'RepeatIntervalMilliseconds', 'PanelWidth')
 TRAVEL_KEYS = ('HomeButton', 'KeyboardHomeButton', 'HomeHoldMilliseconds')
 parser = argparse.ArgumentParser(description=__doc__)

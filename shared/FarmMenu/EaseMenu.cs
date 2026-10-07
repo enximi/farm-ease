@@ -9,6 +9,7 @@ namespace FarmMenu;
 internal abstract class EaseMenu : IClickableMenu
 {
     protected readonly MenuController Menu;
+    protected virtual bool AllowMounted => false;
     private Point lastDirection;
     private double repeatAt;
     protected EaseMenu(MenuController menu) : base(0, 0, 0, 0) => Menu = menu;
@@ -20,7 +21,7 @@ internal abstract class EaseMenu : IClickableMenu
 
     internal void HandleButton(SButton button)
     {
-        if (this is not HubPage && !Menu.CanUse(out _, true)) return;
+        if (this is not HubPage && !Menu.CanUse(out _, true, allowMounted: AllowMounted)) return;
         Point direction = Direction(button);
         if (direction != Point.Zero)
         {
@@ -37,7 +38,7 @@ internal abstract class EaseMenu : IClickableMenu
 
     internal virtual void TickInput()
     {
-        if (this is not HubPage && !Menu.CanUse(out _, true)) { exitThisMenu(false); return; }
+        if (this is not HubPage && !Menu.CanUse(out _, true, allowMounted: AllowMounted)) { exitThisMenu(false); return; }
         Point direction = Point.Zero;
         foreach (SButton key in DirectionButtons)
         {

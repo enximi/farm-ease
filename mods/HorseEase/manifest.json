@@ -1,0 +1,10 @@
+{
+  "Name": "Horse Ease · 闻哨而来",
+  "Author": "zzz",
+  "Version": "0.1.0",
+  "Description": "一键呼唤自己的马，沿用原版马笛的归属、空间检查和多人同步；农场随心统一入口。",
+  "UniqueID": "zzz.HorseEase",
+  "EntryDll": "HorseEase.dll",
+  "MinimumApiVersion": "4.5.2",
+  "UpdateKeys": []
+}

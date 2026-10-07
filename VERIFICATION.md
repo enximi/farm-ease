@@ -1,6 +1,15 @@
-# 验证记录 · 2026-10-07
+# 验证记录 · 2026-10-08
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
+
+## 骑乘快捷开箱修复与 HorseEase 0.1.0 闻哨而来 · 2026-10-08
+
+- 源码定位骑乘开箱的三处阻断：StorageNavigation 的入口检查默认拒绝骑乘；共享 TickMenuHold 在计时中仍使用默认骑乘限制；StorageOpeningMenu/StorageOptionsMenu 继承的 EaseMenu 在输入和每帧检查时拒绝骑乘。现在入口、返回主菜单及长按计时允许稳定骑乘，EaseMenu 新增默认关闭的 AllowMounted，仅仓储等待/设置界面启用；上下马动画、工具使用、过场等原有检查保留。手动整理等其他界面不因此放开骑乘。
+- 新增独立「闻哨而来」HorseEase 0.1.0：首页单动作、F10 快捷键、可配置专用手柄键（默认 None），支持单独安装。沿用 Utility.GetHorseWarpRestrictionsForFarmer 与 FarmerTeam.requestHorseWarpEvent；只发出当前玩家的原生马笛请求，房主通过既有 Stable 归属查找、空间检查、马的 mutex 和 warpCharacter 搬运原马。没有创建马、改写归属或另建客机角色副本，无需房主额外安装此 Mod。已骑乘或马已在身边时给出提示；每屏 1.5 秒节流，不自动重试。
+- 只读核对本机 1.6.15 Object 的马笛使用路径、Utility 限制与 FarmerTeam.OnRequestHorseWarp。原生请求无成功回执，「已呼唤坐骑」仅表示已发出；房主处理时条件变化仍可能拒绝。菜单描述与 README 明确需要已有认领命名的马、室外和空间限制。
+- 共享菜单提供者列表末尾追加 HorseEase，保持既有优先顺序。因菜单源码分别编译进各 Mod，六个已有模块同步补丁版本：TravelEase 1.4.1、GardenEase 1.9.1、FishingEase 0.3.3、StorageEase 1.5.2、SignEase 0.1.1、RidingEase 0.1.1。构建、打包、安装脚本已纳入第七个 Mod；未运行全量打包脚本。
+- 七个项目最终 Release 编译均为零警告、零错误；build.sh 语法、Python 安装/打包脚本语法、manifest 与 csproj 版本及 Git 差异空白检查通过。遵守要求，没有编写或运行测试，没有启动游戏，没有生成 ZIP。骑乘连续长按/F9 开箱、等待/取消/换箱、实际召唤、远程与分屏、马被占用时的竞争及自定义地图行为仍待实机验证。
+- 确认游戏退出后备份旧六个模块，仅替换各自 DLL、manifest、README，并新增 HorseEase。七个构建/dist/正式安装对应文件一致；其他 Mod、配置、存档及语言共 18 个受保护文件摘要未变。备份：`.work/backups/horse-and-mounted-storage-20261008-010222-049629`；证据：`.work/verification/horse-and-mounted-storage-install.json`。StorageEase DLL SHA-256：`7c140bad5e884131ee77c3a8561ca635bcfa7e713a1a60d16b1ddb143e4cab1d`；HorseEase DLL SHA-256：`4bec5bda776d23c70085c6a2775c0160544d4a4e83223cb3a05ab52fc941ed39`。
 
 ## GardenEase 1.9.0 一键牧草疏植 · 2026-10-07
 

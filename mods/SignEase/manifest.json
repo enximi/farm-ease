@@ -1,7 +1,7 @@
 {
   "Name": "Sign Ease · 一目了然",
   "Author": "zzz",
-  "Version": "0.1.0",
+  "Version": "0.1.1",
   "Description": "箱子正后方的告示牌自动显示箱内首件物品图标，房主更新、原生多人同步，接入农场随心。",
   "UniqueID": "zzz.SignEase",
   "EntryDll": "SignEase.dll",

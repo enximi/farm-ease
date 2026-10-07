@@ -10,7 +10,7 @@ namespace FarmMenu;
 
 internal sealed class MenuController
 {
-    private static readonly string[] Providers = { "zzz.TravelEase", "zzz.GardenEase", "zzz.FishingEase", "zzz.StorageEase", "zzz.SignEase", "zzz.RidingEase" };
+    private static readonly string[] Providers = { "zzz.TravelEase", "zzz.GardenEase", "zzz.FishingEase", "zzz.StorageEase", "zzz.SignEase", "zzz.RidingEase", "zzz.HorseEase" };
     internal Mod Mod { get; }
     internal MenuSettings Settings { get; private set; } = new();
     internal FarmMenuApi PublicApi { get; }
@@ -210,7 +210,8 @@ internal sealed class MenuController
         { ReleaseMenuHold(hold.Button); return; }
         Mod.Helper.Input.Suppress(hold.Button);
         if (hold.Triggered) return;
-        if (!Game1.game1.IsActive || !CanUse(out _) || !hold.Action.Enabled()) { holds.Value = null; return; }
+        // 骑乘是否适用由具体快捷功能决定；计时期间与按下时采用一致的通用检查。
+        if (!Game1.game1.IsActive || !CanUse(out _, allowMounted: true) || !hold.Action.Enabled()) { holds.Value = null; return; }
         hold.Elapsed += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
         if (hold.Elapsed < Math.Clamp(hold.Action.Milliseconds(), 250, 2000)) return;
         hold.Triggered = true;
