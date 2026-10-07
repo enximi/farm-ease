@@ -1,6 +1,13 @@
-# 验证记录 · 2026-10-04
+# 验证记录 · 2026-10-07
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
+
+## GardenEase 1.8.1 P2 搬移作物后不可见 · 2026-10-07
+
+- 用户确认搬移的是作物：P2 原位置与目标位置均看不到，房主正常显示，P2 退出整理并传送后恢复。核对本机 1.6.15 Crop、HoeDirt、TerrainFeature、GameLocation 与 NetDictionary/NetRef 原生源码，确认作物绘制坐标、贴图矩形和层级不属于网络字段；网络反序列化创建作物时地形尚未获得最终坐标，随后 HoeDirt.Tile 仅更新 crop.tilePosition，不调用 updateDrawMath。房主 ArrangeItem.Refresh 显式更新缓存，因此双方显示不同；此为源码定位，未启动游戏重现。
+- 新增 CropDisplay，订阅 TerrainFeatureListChanged；在农场收到已加入的原版 HoeDirt/Crop 后，核对该格仍是同一地形实例，并用字典中的最终坐标刷新本屏作物绘制缓存。适用于房主、客机与本地分屏，移动、交换、批量及撤销复用同一事件；不依赖整理成功回复的到达顺序，不重发或复制作物、不改写客户端地形字典，不调用会写入水稻缓存等网络字段的房主 Refresh。
+- Release 编译零警告、零错误，Git 差异空白检查通过。未编写测试、未启动游戏、未生成 ZIP。实际 P2 连续搬移、交换、批量、撤销、多屏/联机显示与保存加载仍需实机确认。
+- 确认游戏关闭后备份并仅替换 GardenEase 的 DLL、manifest、README；构建/dist/正式安装逐字节一致。其他 Mod、配置、存档及语言共 30 个文件摘要未变。备份：`.work/backups/garden-crop-display-20261007-215607-560277`；证据：`.work/verification/garden-crop-display-install.json`；DLL SHA-256：`be7b5ec18c6d96f3c73d917b9f0491dbf4c4b73180b269b6c0e3906a4f3fc1cd`。
 
 ## StorageEase 1.5.1 远程箱子首次点击误报占用 · 2026-10-04
 

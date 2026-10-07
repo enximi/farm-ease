@@ -13,6 +13,7 @@ public sealed class ModEntry : Mod
     {
         Network = new(this);
         helper.Events.World.ObjectListChanged += CampfireSounds.OnObjectsChanged;
+        helper.Events.World.TerrainFeatureListChanged += CropDisplay.OnTerrainChanged;
         Menu = new(this, () => { }, api =>
         {
             api.RegisterAction("", "garden.arrange", () => "田园巧整",
