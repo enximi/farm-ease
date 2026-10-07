@@ -76,6 +76,18 @@ internal sealed class MoveSession
         return $"已整体搬移 {plan.Entries.Length} 个对象，状态保留；可一步撤销。";
     }
 
+    internal string SpreadPasture(ISet<Vector2>? reserved = null)
+    {
+        if (HasSelection) return "请先放下或取消当前选中，再疏植牧草。";
+        var plan = PasturePlanner.Plan(Farm, reserved ?? new HashSet<Vector2>());
+        if (plan == null) return "没有需要疏植的牧草，或没有合适空地；现有牧草保持原位。";
+        if (plan.Validate(Farm, actor).Reason is string reason) return reason + " 整批未疏植。";
+        plan.Transfer(Farm, actor);
+        LastChanged = plan.Affected;
+        undo.Push(new Move(plan.Entries[0].From, plan.Entries[0].To, null, null, plan.Reverse(Farm)));
+        return $"已疏植 {plan.Entries.Length} 格牧草，其余留在原处；X / Z 可整批撤销。";
+    }
+
     internal ArrangeItem? SwapTarget(Vector2 tile)
     {
         if (Selected == null || Source == tile) return null;

@@ -276,6 +276,20 @@ internal sealed class GardenNetwork
         {
             case "Open": reply.Message = "已连接房主，可以与其他玩家同时整理。时间继续流逝。"; break;
             case "Cancel": moves.Cancel(); reply.Message = "已取消选中，对象仍在原位置。"; break;
+            case "Spread":
+            {
+                // 房主以当前世界生成完整计划；重试仍使用会话序号去重。
+                var reserved = sessions.Values.Where(s => s.Player != session.Player && ReferenceEquals(s.Moves.Farm, moves.Farm))
+                    .SelectMany(s => s.Moves.ReservedTiles).ToHashSet();
+                int before = moves.UndoCount;
+                reply.Message = moves.SpreadPasture(reserved);
+                if (moves.UndoCount > before)
+                {
+                    LayoutChanged(session);
+                    foreach (var changed in moves.LastChanged) session.Observe(changed);
+                }
+                break;
+            }
             case "SelectBatch":
             {
                 var area = new Rectangle(request.X, request.Y, request.Width, request.Height);

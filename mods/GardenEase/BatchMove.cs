@@ -17,11 +17,24 @@ internal sealed class BatchMove
     internal Rectangle Area { get; }
     internal Entry[] Entries { get; }
     private readonly Dictionary<(bool Objects, Vector2 Tile), object?> sources;
+    private readonly bool pastureLayout;
     internal Vector2 Origin => new(Area.X, Area.Y);
     internal Vector2[] Affected => Entries.SelectMany(e => new[] { e.From, e.To }).Distinct().ToArray();
 
-    private BatchMove(Rectangle area, Entry[] entries, Dictionary<(bool, Vector2), object?> sources)
-    { Area = area; Entries = entries; this.sources = sources; }
+    private BatchMove(Rectangle area, Entry[] entries, Dictionary<(bool, Vector2), object?> sources, bool pastureLayout = false)
+    { Area = area; Entries = entries; this.sources = sources; this.pastureLayout = pastureLayout; }
+
+    // 自动疏植是稀疏布局；仅限原版牧草，不放宽手动框选的面积限制。
+    internal static BatchMove ForPasture(Farm farm, Entry[] entries)
+    {
+        if (entries.Length == 0 || entries.Any(e => !ArrangeItem.IsPasture(e.Item.Value)
+                || e.From == e.To || !farm.isTileOnMap(e.From) || !farm.isTileOnMap(e.To))
+            || entries.Select(e => e.From).Distinct().Count() != entries.Length
+            || entries.Select(e => e.To).Distinct().Count() != entries.Length)
+            throw new ArgumentException("牧草布局包含无效或重复的位置。");
+        return new(new Rectangle(0, 0, farm.Map.Layers[0].LayerWidth, farm.Map.Layers[0].LayerHeight),
+            entries, Snapshot(farm, entries.Select(e => e.From)), true);
+    }
 
     internal static Rectangle Between(Vector2 a, Vector2 b) => new((int)Math.Min(a.X, b.X), (int)Math.Min(a.Y, b.Y),
         (int)Math.Abs(a.X - b.X) + 1, (int)Math.Abs(a.Y - b.Y) + 1);
@@ -74,13 +87,14 @@ internal sealed class BatchMove
     }
     internal BatchMove At(Vector2 origin)
     {
+        if (pastureLayout) throw new InvalidOperationException("自动疏植布局不能整体平移。");
         Vector2 offset = origin - Origin;
         return new(Area, Entries.Select(e => e with { To = e.From + offset }).ToArray(), sources);
     }
-    internal Rectangle DestinationArea => new((int)(Area.X + Entries[0].To.X - Entries[0].From.X),
+    internal Rectangle DestinationArea => pastureLayout ? Area : new((int)(Area.X + Entries[0].To.X - Entries[0].From.X),
         (int)(Area.Y + Entries[0].To.Y - Entries[0].From.Y), Area.Width, Area.Height);
     internal BatchMove Reverse(Farm farm) => new(DestinationArea, Entries.Select(e => new Entry(e.To, e.From, e.Item)).ToArray(),
-        Snapshot(farm, Entries.Select(e => e.To)));
+        Snapshot(farm, Entries.Select(e => e.To)), pastureLayout);
 
     private static IEnumerable<(bool Objects, object Value)> Components(ArrangeItem item)
     {
@@ -94,7 +108,9 @@ internal sealed class BatchMove
         void Fail(Vector2 tile, string reason)
         { conflicts.Add(tile); first ??= $"({(int)tile.X},{(int)tile.Y})：{reason}"; }
         if (Entries.All(e => e.From == e.To)) return new("移动光标选择整批放置位置。", conflicts);
-        if (!ValidArea(farm, DestinationArea)) return new("整组选区超出农场边界。", Entries.Select(e => e.To).ToHashSet());
+        if (pastureLayout ? Entries.Any(e => !ArrangeItem.IsPasture(e.Item.Value)
+                || !farm.isTileOnMap(e.From) || !farm.isTileOnMap(e.To)) : !ValidArea(farm, DestinationArea))
+            return new("整组选区超出农场边界或牧草类型已变化。", Entries.Select(e => e.To).ToHashSet());
         foreach (var pair in sources)
             if (!ReferenceEquals(pair.Value, Read(farm, pair.Key.Objects, pair.Key.Tile))) Fail(pair.Key.Tile, "原位置已变化，请取消后重新框选。");
 

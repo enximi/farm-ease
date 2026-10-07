@@ -13,6 +13,8 @@ internal sealed class ArrangeMenu : EaseMenu
     private readonly bool multiplayer = Context.IsMultiplayer;
     private int remoteUndoCount;
     private bool showReply;
+    private bool spreadPending;
+    private bool hostOpened;
     internal bool WaitingForHost { get; set; }
     private int UndoCount => multiplayer ? remoteUndoCount : session.UndoCount;
     private Vector2 cursor;
@@ -33,9 +35,10 @@ internal sealed class ArrangeMenu : EaseMenu
     private string message = "选择作物、牧草、树木、道路或农场设施，按确认开始整理。";
     private Rectangle top, bottom;
 
-    internal ArrangeMenu(ModEntry mod, Farm farm) : base(mod.Menu)
+    internal ArrangeMenu(ModEntry mod, Farm farm, bool spreadPasture = false) : base(mod.Menu)
     {
         Mod = mod;
+        spreadPending = spreadPasture;
         session = new MoveSession(farm);
         cursor = Game1.player.Tile + new Vector2(0, 1);
         previousViewportFreeze = Game1.viewportFreeze;
@@ -57,6 +60,21 @@ internal sealed class ArrangeMenu : EaseMenu
     internal override void TickInput()
     {
         if (!ReferenceEquals(Game1.currentLocation, session.Farm) || multiplayer != Context.IsMultiplayer) { exitThisMenu(false); return; }
+        if (spreadPending && ReferenceEquals(Game1.activeClickableMenu, this))
+        {
+            if (multiplayer && (!hostOpened || WaitingForHost)) return;
+            spreadPending = false;
+            if (!Mod.Menu.CanUse(out message, true)) { showReply = true; return; }
+            if (multiplayer) Mod.Network.Send("Spread", Point.Zero, "");
+            else
+            {
+                try { message = session.SpreadPasture(); }
+                catch (Exception ex) { Mod.Report(ex); message = "疏植未完成，已尝试恢复原位置。请查看 SMAPI 日志。"; }
+                showReply = true;
+                Game1.playSound("smallSelect");
+            }
+            return;
+        }
         base.TickInput();
         if (ReferenceEquals(Game1.activeClickableMenu, this)) FollowCursor();
     }
@@ -209,6 +227,7 @@ internal sealed class ArrangeMenu : EaseMenu
             return;
         }
         remoteUndoCount = reply.UndoCount;
+        if (reply.Action == "Open") hostOpened = true;
         if (reply.Action == "Ping") return;
         message = reply.Message;
         showReply = true;

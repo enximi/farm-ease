@@ -1,8 +1,8 @@
 {
   "Name": "Garden Ease · 田园巧整",
   "Author": "zzz",
-  "Version": "1.8.3",
-  "Description": "作物、树木、道路与设施搬移及交换，树上采集器随树移动，支持告示牌与篝火，保留点燃状态、果实、箱子内容、加工进度与牌面内容；农场随心统一入口。",
+  "Version": "1.9.0",
+  "Description": "作物、牧草、树木、道路与设施搬移及交换；一键棋盘式牧草疏植，优先动物建筑周边；保留原状态，支持整批撤销，农场随心统一入口。",
   "UniqueID": "zzz.GardenEase",
   "EntryDll": "GardenEase.dll",
   "MinimumApiVersion": "4.5.2",
