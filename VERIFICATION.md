@@ -2,6 +2,15 @@
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
+## GardenEase 1.8.2 其他搬移对象的本地刷新 · 2026-10-07
+
+- 扩展 CropDisplay 为 LayoutDisplay，保留作物最终坐标绘制刷新；对原版牧草更新本地草丛偏移，对普通树木补齐季节/纹理缓存，对果树加载纹理，按地形加入/移除后的最终布局刷新改动格及周围八格的道路连接。核对原生 Grass.setUpRandom、Tree.performPlayerEntryAction、FruitTree.loadSprite、Flooring.OnAdded，所调用路径不改写生长、草量或随机地板朝向；跳过临时隐藏地形。没有主动调用客户端 HoeDirt.updateNeighbors，因其会间接计算水稻灌溉并可能写联网字段，保留原生耕地回调。
+- 原生围栏附件不独立进入对象字典，旧搬移流程只更新围栏主体。房主现同步设置附带火把的位置及地图关联，并在捕获灯光前补齐附件地图关联以生成正确的目标灯光标识；客机收到围栏后仅补本地地图引用。复用既有 MoveLights 迁移/撤销，不调用会重新点燃附件的 actionOnPlayerEntry。
+- 原生箱子推动结束只清本地动画，联网 kickStartTile 仍可保留旧起点，P2 重建实例时可能重播旧推动。房主整理时将旧起点恢复原生无动画哨兵值；正在被推动的箱子暂不允许整理，避免两个移动流程重叠。每端收到箱子后补充本地箱盖刷新，不修改箱子库存或原生锁。
+- 单件、交换、批量和撤销共用以上路径；机器、洒水器、稻草人、告示牌及采集器继续沿用原生对象加入时的位置刷新，篝火保留既有灯光与本屏环境声迁移。本次未发现这些类别需要另外重建对象的证据。以上为源码审查与针对性补齐，不代表所有类别均已复现过消失，也不代表完成实机多人验证。
+- Release 编译零警告、零错误，Git 差异空白检查通过。未编写测试、未启动游戏、未生成 ZIP。实际 P2 / 分屏显示、重叠批量、交换、撤销、保存加载及围栏附件的视觉/光照仍需实机确认。房主和参与整理者需统一使用 1.8.2；旁观玩家若要获得本地显示修复也应安装本版。
+- 确认游戏关闭后备份并仅替换 GardenEase 的 DLL、manifest、README；构建/dist/正式安装逐字节一致，其他 Mod、配置、存档及语言共 30 个文件摘要未变。备份：`.work/backups/garden-layout-display-20261007-220558-331946`；证据：`.work/verification/garden-layout-display-install.json`；DLL SHA-256：`aba22b5392c9e39434e4a900469163af6d8d28a8bd85e171ca6d1f651a843b75`。
+
 ## GardenEase 1.8.1 P2 搬移作物后不可见 · 2026-10-07
 
 - 用户确认搬移的是作物：P2 原位置与目标位置均看不到，房主正常显示，P2 退出整理并传送后恢复。核对本机 1.6.15 Crop、HoeDirt、TerrainFeature、GameLocation 与 NetDictionary/NetRef 原生源码，确认作物绘制坐标、贴图矩形和层级不属于网络字段；网络反序列化创建作物时地形尚未获得最终坐标，随后 HoeDirt.Tile 仅更新 crop.tilePosition，不调用 updateDrawMath。房主 ArrangeItem.Refresh 显式更新缓存，因此双方显示不同；此为源码定位，未启动游戏重现。

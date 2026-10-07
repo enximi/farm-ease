@@ -22,7 +22,12 @@ internal sealed class MoveLights
         }
         if (item.PlacedObject is not { } placed) return;
         CaptureObject(placed);
-        if (placed is Fence && placed.heldObject.Value is { } torch) CaptureObject(torch);
+        if (placed is Fence && placed.heldObject.Value is { } torch)
+        {
+            // 附件的地图引用不联网，先绑定所在农场才能计算目标灯光标识。
+            torch.Location = farm;
+            CaptureObject(torch);
+        }
     }
     internal void Detach()
     {

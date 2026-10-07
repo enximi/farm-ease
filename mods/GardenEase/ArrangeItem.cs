@@ -82,6 +82,8 @@ internal sealed class ArrangeItem
             return "箱子或附属容器正在使用，请关闭后再整理。";
         if (PlacedObject?.isTemporarilyInvisible == true || Value is TerrainFeature { isTemporarilyInvisible: true })
             return "对象正在移动或隐藏，请稍后再整理。";
+        if (Object is Chest { localKickStartTile: not null })
+            return "箱子正在被推动，请等移动结束后再整理。";
         if (Value is Grass grass && (!IsPasture(grass) || grass.numberOfWeeds.Value <= 0))
             return "牧草已被吃完、割除或发生变化，请重新选择。";
         if (Value is Tree tree && (tree.falling.Value || tree.destroy.Value || tree.health.Value <= -99)
@@ -144,6 +146,19 @@ internal sealed class ArrangeItem
         {
             obj.Location = farm;
             obj.TileLocation = tile;
+            if (obj is Fence && obj.heldObject.Value is Torch torch)
+            {
+                // 附件不会触发地面对象的位置回调，必须随围栏更新，撤销亦沿用此流程。
+                torch.Location = farm;
+                torch.TileLocation = tile;
+            }
+            if (obj is Chest chest)
+            {
+                // 已结束的推动仍保留联网起点；清掉它，避免 P2 接收新位置时重播旧推动。
+                chest.kickStartTile.Value = new Vector2(-1000, -1000);
+                chest.localKickStartTile = null;
+                chest.kickProgress = -1;
+            }
         }
         else if (Dirt is { } dirt)
         {
