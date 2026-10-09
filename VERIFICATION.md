@@ -2,6 +2,18 @@
 
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
+## TimeEase 0.1.6 适时而归 · 2026-10-09
+
+- 新增第八个独立 Mod，并接入共享菜单、构建、打包及安装列表。默认每日 60 分钟，Asia/Shanghai 00:00 重置，提前 10 分钟提醒；菜单、暂停、后台与保存计时，标题和休息不计时。分屏只计一次。独立记录跨存档/重启累计，采用进程锁、幂等会话累计、原子替换和备份；损坏不会自动清零。今日 +15/+30/自定义加时持久化，与每日默认分开。
+- 保存成功凭证只来自经过 1.6.15 build 24354 IL 指纹核验的原生内层 MoveNext 在正式文件替换后发出的 100，再结合 Saved 与原生结算就绪。只读观察，异常与返回原样传递；不调用保存、不写实际存档，不使用 DayStarted 或外层 Save 的 100 作为成功依据。未知实现、冲突、取消或异常只提醒。
+- 0.1.5 人工日志发现原生保存报告无异常并进入新一天，但工厂观察未命中。0.1.6 改到实际执行的内层状态机，单次令牌绑定单一初始状态机，后台只原子写入令牌，不读写 Game1/UI；旧状态机、多个状态机混入和提前结束都不能放行。日志无法单独证明旧工厂被 JIT 内联。提示明确未确认成功不等于存档损坏。
+- 0.1.6 最新人工日志确认：observer_ready supported=True → quota_reached → save_begin → save_evidence observed=True native_steps=5 committed=True → settlement_complete decision=Rest phase=Ready → block_enter → block_exit reason=user_return_to_title → title_block。用户确认开发测试完成、现有手柄交互可用；没有继续重做 UI。
+- 单人满额允许完成当天；确认保存与结算后暂停继续操作，由用户主动返回标题。满额重新载入已解析的磁盘存档也检查安全边界。每日设置与今日加时均有入口，不清空已用量。没有自动启动游戏、操纵控制器、杀进程、系统级限制或改写存档。
+- 同版远程联机逐成员确认保存与结算后，房主满额结束房间，客机满额仅相应客机退出；纯本地分屏等全屏就绪后主屏统一返回标题。超时、成员/日期/模式变化或未知流程撤销权限。联机及分屏仍属未实测预览，混合模式只提醒。
+- 全八个项目曾通过 Release 编译；最终 TimeEase 构建零警告、零错误，git diff --check 通过。初期按用户明确要求在 /tmp 进行 77 项纯逻辑断言，没有将测试或依赖加入仓库；后续按 AGENTS.md 没有新增或运行测试。
+- Mac 安装只复制 TimeEase.dll、manifest、README，安装前两次完整宽度 ps 成功确认游戏未运行；31 个其他 Mod 文件和既有配置摘要不变，未读取存档或计时账本。安装证据位于忽略目录 .work/verification/timeease/save-observer-fix-install.json，备份位于 .work/backups/timeease-save-fix-20261009-130651。已安装 DLL 与 Release、dist 摘要一致：686141553b7daf7e206e010918af26a5f2e3b03d267c2be085b12c1446d40da7。
+- 尚无单独实机证据覆盖远程联机、纯本地分屏、午夜/夏令时、异常存储、全部加时分支和全部手柄/窗口组合。Windows 未在 Mac 上安装；应使用相同提交针对当地 1.6.15 / SMAPI 4.5.2 构建，保留既有配置、计时数据及其他 Mod，正常退出后安装三个发布文件，启动确认保存观察器支持状态。
+
 ## 骑乘快捷开箱修复与 HorseEase 0.1.0 闻哨而来 · 2026-10-08
 
 - 源码定位骑乘开箱的三处阻断：StorageNavigation 的入口检查默认拒绝骑乘；共享 TickMenuHold 在计时中仍使用默认骑乘限制；StorageOpeningMenu/StorageOptionsMenu 继承的 EaseMenu 在输入和每帧检查时拒绝骑乘。现在入口、返回主菜单及长按计时允许稳定骑乘，EaseMenu 新增默认关闭的 AllowMounted，仅仓储等待/设置界面启用；上下马动画、工具使用、过场等原有检查保留。手动整理等其他界面不因此放开骑乘。

@@ -1,0 +1,10 @@
+{
+  "Name": "Time Ease · 适时而归",
+  "Author": "zzz",
+  "Version": "0.1.6",
+  "Description": "现实每日游玩额度、持久计时与保存后的休息提醒；单人保存后休息；同版远程联机保存结算后退出为人工验证预览，纯本地分屏全屏结算后统一退出为预览。",
+  "UniqueID": "zzz.TimeEase",
+  "EntryDll": "TimeEase.dll",
+  "MinimumApiVersion": "4.5.2",
+  "UpdateKeys": []
+}
