@@ -81,7 +81,9 @@ internal sealed class TravelService
         if (TravelDestinations.LockReason(location.NameOrUniqueName, tile) != null) return false;
         if (location.doesTileHaveProperty((int)tile.X, (int)tile.Y, "Water", "Back") != null) return false;
         if (location.doesTileHaveProperty((int)tile.X, (int)tile.Y, "TouchAction", "Back") != null) return false;
-        if (location.IsTileOccupiedBy(tile, CollisionMask.All & ~CollisionMask.Farmers)) return false;
+        // 可通行的道路、地板等允许落脚，仍检查真正阻挡移动的占用。
+        if (location.IsTileOccupiedBy(tile, CollisionMask.All & ~CollisionMask.Farmers,
+            ignorePassables: CollisionMask.All)) return false;
         var bounds = new Rectangle((int)tile.X * 64, (int)tile.Y * 64, 64, 64);
         if (location is Forest forest && forest.ShouldTravelingMerchantVisitToday())
         {
