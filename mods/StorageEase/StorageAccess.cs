@@ -76,21 +76,17 @@ internal sealed class StorageAccess
     {
         if (!mod.InRange) { mod.Menu.Notify("舒适模式仅在农场或农舍内使用。可以切换随行模式。"); return; }
         if (Pending) return;
-        var chest = StorageCatalog.Resolve(info);
-        if (!info.Remote || chest == null || !StorageCatalog.Available(chest) || !StorageCatalog.Flag(chest, "remote", true))
-        { mod.Menu.Notify("箱子已移动或关闭远程访问，请刷新后重试。"); return; }
-        chest.ShowMenu();
+        if (!CanOpenRemote(info, out var chest)) return;
+        chest!.ShowMenu();
         states.Value.RemoteOpen = true;
         states.Value.OpenInfo = info;
     }
     internal void Switch(ItemGrabMenu menu, BoxInfo info)
     {
-        if (Pending || !mod.InRange || !info.Remote) return;
+        if (Pending || !mod.InRange) return;
         if (menu.heldItem != null || !menu.readyToClose())
         { mod.Menu.Notify("请先放下手中的物品，再切换箱子。"); return; }
-        if (StorageCatalog.Resolve(info) is not { } target || !StorageCatalog.Available(target)
-            || !StorageCatalog.Flag(target, "remote", true))
-        { mod.Menu.Notify("这个箱子已经移动或关闭远程访问，请刷新后重试。"); return; }
+        if (!CanOpenRemote(info, out _)) return;
         int? selected = menu.currentlySnappedComponent?.myID;
         menu.exitThisMenu(false);
         Open(info);
@@ -100,6 +96,22 @@ internal sealed class StorageAccess
             if (Game1.options.SnappyMenus) next.snapCursorToCurrentSnappedComponent();
         }
         Game1.playSound("smallSelect");
+    }
+
+    private bool CanOpenRemote(BoxInfo info, out Chest? chest)
+    {
+        chest = StorageCatalog.Resolve(info);
+        if (chest == null)
+        {
+            mod.Network.Refresh();
+            mod.Menu.Notify("箱子位置已变化，正在刷新箱子列表，请稍后重试。");
+            return false;
+        }
+        if (!info.Remote || !StorageCatalog.Flag(chest, "remote", true))
+        { mod.Menu.Notify("这个箱子的远程访问已关闭，请在全部箱子中打开「远程开关」。"); return false; }
+        if (StorageCatalog.UnavailableReason(chest) is string reason)
+        { mod.Menu.Notify(reason); return false; }
+        return true;
     }
 
     // Do not replay coordinates against a changed inventory or a resized menu.

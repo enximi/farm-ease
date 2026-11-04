@@ -11,7 +11,7 @@ internal static class CampfireSounds
     // final dictionary changes on each peer, including swaps, undo and rollback.
     internal static void OnObjectsChanged(object? sender, ObjectListChangedEventArgs e)
     {
-        if (e.Location is not Farm || !ReferenceEquals(e.Location, Game1.currentLocation)) return;
+        if (!ArrangeLocation.Supports(e.Location) || !ReferenceEquals(e.Location, Game1.currentLocation)) return;
         var changed = new HashSet<Vector2>();
         foreach (var pair in e.Removed)
         {

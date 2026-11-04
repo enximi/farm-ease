@@ -40,14 +40,16 @@ internal sealed class MountedTravel
             && ReferenceEquals(__1, scope.Source) && ReferenceEquals(__2, scope.Target)) __result = false;
     }
 
-    internal void Warp(GameLocation target, Vector2 landing)
+    internal void Warp(GameLocation target, Vector2 landing, Action? onArrival = null)
     {
         var previous = scopes.Value;
         try
         {
             scopes.Value = Game1.player.mount is { } horse
                 ? new(Game1.player, horse, Game1.currentLocation, target) : null;
-            Game1.warpFarmer(target.NameOrUniqueName, (int)landing.X, (int)landing.Y, 2, target.isStructure.Value);
+            var request = Game1.getLocationRequest(target.NameOrUniqueName, target.isStructure.Value);
+            if (onArrival != null) request.OnWarp += () => onArrival();
+            Game1.warpFarmer(request, (int)landing.X, (int)landing.Y, 2);
         }
         finally { scopes.Value = previous; }
     }

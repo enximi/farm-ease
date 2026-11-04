@@ -29,7 +29,19 @@ internal static class StorageCatalog
         && chest.SpecialChestType is Chest.SpecialChestTypes.None or Chest.SpecialChestTypes.BigChest or Chest.SpecialChestTypes.JunimoChest;
     internal static bool Flag(Chest chest, string key, bool fallback) => chest.modData.TryGetValue(Prefix + key, out var value)
         ? value == "true" : fallback;
-    internal static bool Available(Chest chest) => !chest.isTemporarilyInvisible && chest.localKickStartTile == null;
+    internal static bool Available(Chest chest) => UnavailableReason(chest) == null;
+    internal static string? UnavailableReason(Chest chest)
+    {
+        if (chest.isTemporarilyInvisible) return "箱子正在移动或隐藏，请等操作结束。";
+        if (chest.Location?.objects.TryGetValue(chest.TileLocation, out var placed) != true || !ReferenceEquals(placed, chest))
+            return "箱子位置正在同步，请稍后刷新箱子列表。";
+        // 推动先更新地图中的实际位置，再播放本屏动画；远处地图不推进这个动画。
+        // 分屏的另一屏可能一直保留 localKickStartTile，不能据此永久禁用已落位的远程箱子。
+        // 不清除动画或改写联网字段，仍由原版处理当前地图上的推动效果。
+        if (ReferenceEquals(chest.Location, Game1.currentLocation) && chest.localKickStartTile != null)
+            return "箱子正在被推动，请等推动动画结束。";
+        return null;
+    }
     internal static IEnumerable<(GameLocation Location, Chest Chest)> All()
     {
         var boxes = new List<(GameLocation, Chest)>();

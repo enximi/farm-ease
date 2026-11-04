@@ -26,10 +26,10 @@ internal sealed class ArrangeItem
         : Value is Flooring ? "道路 / 地板" : Dirt?.crop != null ? "作物与耕地" : "空耕地");
     private ArrangeItem(object value, SObject? tapper = null) { Value = value; Tapper = tapper; }
 
-    internal static ArrangeItem? Read(Farm farm, Vector2 tile, bool? objectLayer = null)
+    internal static ArrangeItem? Read(GameLocation location, Vector2 tile, bool? objectLayer = null)
     {
-        farm.objects.TryGetValue(tile, out var obj);
-        farm.terrainFeatures.TryGetValue(tile, out var terrain);
+        location.objects.TryGetValue(tile, out var obj);
+        location.terrainFeatures.TryGetValue(tile, out var terrain);
         bool tree = terrain?.GetType() == typeof(Tree) || terrain?.GetType() == typeof(FruitTree);
         if (objectLayer != true && tree && (obj == null
             || (terrain is Tree && obj.GetType() == typeof(SObject) && obj.IsTapper())))
@@ -70,18 +70,18 @@ internal sealed class ArrangeItem
     internal static bool AllowsObject(TerrainFeature ground) => ground.GetType() == typeof(Flooring)
         || (ground.GetType() == typeof(HoeDirt) && ((HoeDirt)ground).crop == null) || IsPasture(ground);
 
-    internal bool HasCollision(Farm farm, Vector2 tile, CollisionMask mask, bool checkPassability = false)
+    internal bool HasCollision(GameLocation location, Vector2 tile, CollisionMask mask, bool checkPassability = false)
     {
         if (IsPasture(Value) && (mask & CollisionMask.Characters) != 0)
         {
             // 原版将农场动物与 NPC 合在 Characters 中；牧草只豁免 animals 集合。
             // 仍按原版规则检查可见 NPC（含宠物、未骑乘的马），其余障碍交给原生判断。
             var bounds = new Rectangle((int)tile.X * 64, (int)tile.Y * 64, 64, 64);
-            if (farm.characters.Any(character => character != null && !character.IsInvisible
+            if (location.characters.Any(character => character != null && !character.IsInvisible
                 && character.GetBoundingBox().Intersects(bounds))) return true;
             mask &= ~CollisionMask.Characters;
         }
-        return checkPassability ? farm.IsTileBlockedBy(tile, mask) : farm.IsTileOccupiedBy(tile, mask);
+        return checkPassability ? location.IsTileBlockedBy(tile, mask) : location.IsTileOccupiedBy(tile, mask);
     }
 
     internal IEnumerable<NetMutex> Mutexes()
@@ -106,43 +106,43 @@ internal sealed class ArrangeItem
         return null;
     }
 
-    internal object? At(Farm farm, Vector2 tile) => ObjectLayer
-        ? farm.objects.TryGetValue(tile, out var obj) ? obj : null
-        : farm.terrainFeatures.TryGetValue(tile, out var terrain) ? terrain : null;
-    internal bool IsAt(Farm farm, Vector2 tile) => ReferenceEquals(At(farm, tile), Value)
-        && (!IsTree || ReferenceEquals(farm.objects.TryGetValue(tile, out var obj) ? obj : null, Tapper));
-    internal void Remove(Farm farm, Vector2 tile)
+    internal object? At(GameLocation location, Vector2 tile) => ObjectLayer
+        ? location.objects.TryGetValue(tile, out var obj) ? obj : null
+        : location.terrainFeatures.TryGetValue(tile, out var terrain) ? terrain : null;
+    internal bool IsAt(GameLocation location, Vector2 tile) => ReferenceEquals(At(location, tile), Value)
+        && (!IsTree || ReferenceEquals(location.objects.TryGetValue(tile, out var obj) ? obj : null, Tapper));
+    internal void Remove(GameLocation location, Vector2 tile)
     {
-        if (!IsAt(farm, tile)) throw new InvalidOperationException("原位置已发生变化。");
-        if (Tapper != null && !farm.objects.Remove(tile)) throw new InvalidOperationException("树上采集器已发生变化。");
-        bool removed = ObjectLayer ? farm.objects.Remove(tile) : farm.terrainFeatures.Remove(tile);
+        if (!IsAt(location, tile)) throw new InvalidOperationException("原位置已发生变化。");
+        if (Tapper != null && !location.objects.Remove(tile)) throw new InvalidOperationException("树上采集器已发生变化。");
+        bool removed = ObjectLayer ? location.objects.Remove(tile) : location.terrainFeatures.Remove(tile);
         if (!removed) throw new InvalidOperationException("原位置不存在。");
     }
-    internal void Add(Farm farm, Vector2 tile)
+    internal void Add(GameLocation location, Vector2 tile)
     {
-        if (Object is { } obj) farm.objects.Add(tile, obj);
-        else farm.terrainFeatures.Add(tile, (TerrainFeature)Value);
-        if (Tapper != null) farm.objects.Add(tile, Tapper);
+        if (Object is { } obj) location.objects.Add(tile, obj);
+        else location.terrainFeatures.Add(tile, (TerrainFeature)Value);
+        if (Tapper != null) location.objects.Add(tile, Tapper);
     }
 
     // Roll back each dictionary component independently, including a half-moved tree/tapper.
-    internal void RemoveOwned(Farm farm, Vector2 tile) => ForEachComponent((objects, value) =>
+    internal void RemoveOwned(GameLocation location, Vector2 tile) => ForEachComponent((objects, value) =>
     {
         if (objects)
         {
-            if (farm.objects.TryGetValue(tile, out var obj) && ReferenceEquals(obj, value)) farm.objects.Remove(tile);
+            if (location.objects.TryGetValue(tile, out var obj) && ReferenceEquals(obj, value)) location.objects.Remove(tile);
         }
-        else if (farm.terrainFeatures.TryGetValue(tile, out var terrain) && ReferenceEquals(terrain, value)) farm.terrainFeatures.Remove(tile);
+        else if (location.terrainFeatures.TryGetValue(tile, out var terrain) && ReferenceEquals(terrain, value)) location.terrainFeatures.Remove(tile);
     });
 
-    internal void Restore(Farm farm, Vector2 tile) => ForEachComponent((objects, value) =>
+    internal void Restore(GameLocation location, Vector2 tile) => ForEachComponent((objects, value) =>
     {
-        object? current = objects ? farm.objects.TryGetValue(tile, out var obj) ? obj : null
-            : farm.terrainFeatures.TryGetValue(tile, out var terrain) ? terrain : null;
+        object? current = objects ? location.objects.TryGetValue(tile, out var obj) ? obj : null
+            : location.terrainFeatures.TryGetValue(tile, out var terrain) ? terrain : null;
         if (ReferenceEquals(current, value)) return;
         if (current != null) throw new InvalidOperationException("恢复位置被其他对象占用。");
-        if (objects) farm.objects.Add(tile, (SObject)value);
-        else farm.terrainFeatures.Add(tile, (TerrainFeature)value);
+        if (objects) location.objects.Add(tile, (SObject)value);
+        else location.terrainFeatures.Add(tile, (TerrainFeature)value);
     });
 
     private void ForEachComponent(Action<bool, object> action)
@@ -153,17 +153,17 @@ internal sealed class ArrangeItem
             try { action(true, Tapper); } catch (Exception error) { errors.Add(error); }
         if (errors.Count != 0) throw new AggregateException(errors);
     }
-    internal void Refresh(Farm farm, Vector2 tile)
+    internal void Refresh(GameLocation location, Vector2 tile)
     {
-        if (!IsAt(farm, tile)) throw new InvalidOperationException("物体位置不一致，不能刷新。");
+        if (!IsAt(location, tile)) throw new InvalidOperationException("物体位置不一致，不能刷新。");
         if (PlacedObject is { } obj)
         {
-            obj.Location = farm;
+            obj.Location = location;
             obj.TileLocation = tile;
             if (obj is Fence && obj.heldObject.Value is Torch torch)
             {
                 // 附件不会触发地面对象的位置回调，必须随围栏更新，撤销亦沿用此流程。
-                torch.Location = farm;
+                torch.Location = location;
                 torch.TileLocation = tile;
             }
             if (obj is Chest chest)
@@ -181,6 +181,12 @@ internal sealed class ArrangeItem
             dirt.updateNeighbors();
         }
         else if (Value is Grass grass) grass.setUpRandom();
+        else if (Value is FruitTree fruit)
+        {
+            // 与原版种植一致，随落点更新温室地砖上的树根底图；撤销也按原落点恢复。
+            fruit.GreenHouseTileTree = location.IsGreenhouse
+                && location.doesTileHaveProperty((int)tile.X, (int)tile.Y, "Type", "Back") == "Stone";
+        }
         // Flooring adjacency is updated by the terrain dictionary's add/remove callbacks.
         // Fence connections are calculated from the current object positions when drawn.
     }

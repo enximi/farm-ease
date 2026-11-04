@@ -35,18 +35,18 @@ internal sealed class ArrangeMenu : EaseMenu
     private string message = "选择作物、牧草、树木、道路或农场设施，按确认开始整理。";
     private Rectangle top, bottom;
 
-    internal ArrangeMenu(ModEntry mod, Farm farm, bool spreadPasture = false) : base(mod.Menu)
+    internal ArrangeMenu(ModEntry mod, GameLocation location, bool spreadPasture = false) : base(mod.Menu)
     {
         Mod = mod;
         spreadPending = spreadPasture;
-        session = new MoveSession(farm);
+        session = new MoveSession(location);
         cursor = Game1.player.Tile + new Vector2(0, 1);
         previousViewportFreeze = Game1.viewportFreeze;
         Game1.viewportFreeze = true;
         cameraPosition = new Vector2(Game1.viewport.X, Game1.viewport.Y);
         lastViewportPosition = new Point(Game1.viewport.X, Game1.viewport.Y);
         Layout();
-        if (multiplayer) { message = "正在连接房主，申请整理农场。"; Mod.Network.Open(this); }
+        if (multiplayer) { message = "正在连接房主，申请整理当前地图。"; Mod.Network.Open(this); }
     }
 
     private void Layout()
@@ -59,7 +59,7 @@ internal sealed class ArrangeMenu : EaseMenu
     public override void gameWindowSizeChanged(Rectangle oldBounds, Rectangle newBounds) => Layout();
     internal override void TickInput()
     {
-        if (!ReferenceEquals(Game1.currentLocation, session.Farm) || multiplayer != Context.IsMultiplayer) { exitThisMenu(false); return; }
+        if (!ReferenceEquals(Game1.currentLocation, session.Location) || multiplayer != Context.IsMultiplayer) { exitThisMenu(false); return; }
         if (spreadPending && ReferenceEquals(Game1.activeClickableMenu, this))
         {
             if (multiplayer && (!hostOpened || WaitingForHost)) return;
@@ -81,7 +81,7 @@ internal sealed class ArrangeMenu : EaseMenu
     protected override void Move(Point direction)
     {
         var next = cursor + new Vector2(direction.X, direction.Y);
-        if (!session.Farm.isTileOnMap(next)) return;
+        if (!session.Location.isTileOnMap(next)) return;
         cursor = next;
         showReply = false;
     }
@@ -117,15 +117,17 @@ internal sealed class ArrangeMenu : EaseMenu
         Vector2 target = cameraPosition + new Vector2(
             screenPosition.X - Math.Clamp(screenPosition.X, viewWidth * 0.2f, viewWidth * 0.8f),
             screenPosition.Y - Math.Clamp(screenPosition.Y, topLimit, bottomLimit));
-        var mapLimit = new Vector2(
-            Math.Max(0, session.Farm.Map.Layers[0].LayerWidth * 64 - viewWidth),
-            Math.Max(0, session.Farm.Map.Layers[0].LayerHeight * 64 - viewHeight));
-        target = Vector2.Clamp(target, Vector2.Zero, mapLimit);
+        var overflow = new Vector2(session.Location.Map.Layers[0].LayerWidth * 64 - viewWidth,
+            session.Location.Map.Layers[0].LayerHeight * 64 - viewHeight);
+        // 温室可能比当前视口小，此时居中显示；较大的地图继续按边界滚动。
+        var mapStart = Vector2.Min(Vector2.Zero, overflow / 2);
+        var mapLimit = Vector2.Max(mapStart, overflow);
+        target = Vector2.Clamp(target, mapStart, mapLimit);
 
         // Frame-rate independent easing: about 95% of the motion finishes in 0.2 seconds.
         float elapsed = (float)Math.Max(0, Game1.currentGameTime.ElapsedGameTime.TotalSeconds);
         float blend = 1f - MathF.Exp(-elapsed / 0.065f);
-        cameraPosition = Vector2.Clamp(Vector2.Lerp(cameraPosition, target, blend), Vector2.Zero, mapLimit);
+        cameraPosition = Vector2.Clamp(Vector2.Lerp(cameraPosition, target, blend), mapStart, mapLimit);
         if (Vector2.DistanceSquared(cameraPosition, target) < 0.25f) cameraPosition = target;
         Game1.viewport.X = (int)MathF.Round(cameraPosition.X);
         Game1.viewport.Y = (int)MathF.Round(cameraPosition.Y);
@@ -140,7 +142,7 @@ internal sealed class ArrangeMenu : EaseMenu
         {
             showReply = false;
             string action = session.Selected == null ? "Select" : "Place";
-            Mod.Network.Send(action, cursor.ToPoint(), GardenNetwork.Describe(session.Farm, cursor, session.Selected?.ObjectLayer));
+            Mod.Network.Send(action, cursor.ToPoint(), GardenNetwork.Describe(session.Location, cursor, session.Selected?.ObjectLayer));
             return;
         }
         try
@@ -167,11 +169,11 @@ internal sealed class ArrangeMenu : EaseMenu
         Rectangle area = selectionCorner is Vector2 corner ? BatchMove.Between(corner, cursor) : session.Batch!.Area;
         if (session.Batch == null)
         {
-            if (!BatchMove.ValidArea(session.Farm, area)) { message = "一次最多框选 256 格（如 16 × 16），请缩小范围。"; showReply = true; return; }
+            if (!BatchMove.ValidArea(session.Location, area)) { message = "一次最多框选 256 格（如 16 × 16），请缩小范围。"; showReply = true; return; }
             grabOffset = cursor - new Vector2(area.X, area.Y);
             if (multiplayer)
             {
-                Mod.Network.Send("SelectBatch", area.Location, GardenNetwork.DescribeArea(session.Farm, area), area);
+                Mod.Network.Send("SelectBatch", area.Location, GardenNetwork.DescribeArea(session.Location, area), area);
                 return;
             }
             message = session.SelectBatch(area);
@@ -180,8 +182,8 @@ internal sealed class ArrangeMenu : EaseMenu
         else if (multiplayer)
         {
             var targetArea = session.Batch.At(BatchTarget).DestinationArea;
-            if (!BatchMove.ValidArea(session.Farm, targetArea)) { message = "整组选区超出农场边界。"; showReply = true; return; }
-            Mod.Network.Send("PlaceBatch", BatchTarget.ToPoint(), GardenNetwork.DescribeArea(session.Farm, targetArea));
+            if (!BatchMove.ValidArea(session.Location, targetArea)) { message = "整组选区超出当前地图边界。"; showReply = true; return; }
+            Mod.Network.Send("PlaceBatch", BatchTarget.ToPoint(), GardenNetwork.DescribeArea(session.Location, targetArea));
         }
         else
         {
@@ -254,7 +256,7 @@ internal sealed class ArrangeMenu : EaseMenu
     {
         if (top.Contains(x, y) || bottom.Contains(x, y)) return;
         Vector2 tile = Mod.Helper.Input.GetCursorPosition().Tile;
-        if (!session.Farm.isTileOnMap(tile)) return;
+        if (!session.Location.isTileOnMap(tile)) return;
         cursor = tile;
         Confirm();
     }
@@ -264,7 +266,7 @@ internal sealed class ArrangeMenu : EaseMenu
         // actual pointer movement, so edge scrolling cannot drag the selection.
         if (!batchMode || e.NewPosition.ScreenPixels == e.OldPosition.ScreenPixels) return;
         int x = Game1.getMouseX(), y = Game1.getMouseY();
-        if (top.Contains(x, y) || bottom.Contains(x, y) || !session.Farm.isTileOnMap(e.NewPosition.Tile)) return;
+        if (top.Contains(x, y) || bottom.Contains(x, y) || !session.Location.isTileOnMap(e.NewPosition.Tile)) return;
         cursor = e.NewPosition.Tile; showReply = false;
     }
 
@@ -272,22 +274,22 @@ internal sealed class ArrangeMenu : EaseMenu
     {
         // This callback is in world space; UI scale and game zoom may differ.
         int minX = Math.Max(0, Game1.viewport.X / 64), minY = Math.Max(0, Game1.viewport.Y / 64);
-        int maxX = Math.Min(session.Farm.Map.Layers[0].LayerWidth - 1, (Game1.viewport.X + Game1.viewport.Width) / 64);
-        int maxY = Math.Min(session.Farm.Map.Layers[0].LayerHeight - 1, (Game1.viewport.Y + Game1.viewport.Height) / 64);
+        int maxX = Math.Min(session.Location.Map.Layers[0].LayerWidth - 1, (Game1.viewport.X + Game1.viewport.Width) / 64);
+        int maxY = Math.Min(session.Location.Map.Layers[0].LayerHeight - 1, (Game1.viewport.Y + Game1.viewport.Height) / 64);
         for (int y = minY; y <= maxY; y++)
             for (int x = minX; x <= maxX; x++)
                 if (session.Selected == null || session.Selected.Dirt != null
-                    ? session.Farm.doesTileHaveProperty(x, y, "Diggable", "Back") != null
-                    : session.Farm.isTilePlaceable(new Vector2(x, y), session.Selected.Passable))
+                    ? session.Location.doesTileHaveProperty(x, y, "Diggable", "Back") != null
+                    : ArrangeLocation.CanPlace(session.Location, new Vector2(x, y), session.Selected.Passable))
                     Ui.Outline(b, TileRect(new Vector2(x, y)), Color.White * 0.12f, 1);
         if (batchMode) { DrawBatch(b); return; }
         if (session.Source is Vector2 source) Ui.Outline(b, TileRect(source), new Color(255, 207, 105), 4);
         bool valid = session.Selected == null || session.InvalidTarget(cursor) == null;
         var swapTarget = session.SwapTarget(cursor);
         bool swapping = swapTarget != null;
-        CoverageOverlay.Draw(b, session.Farm, session.Selected, cursor, valid || session.Source == cursor);
+        CoverageOverlay.Draw(b, session.Location, session.Selected, cursor, valid || session.Source == cursor);
         if (session.Source is Vector2 original)
-            CoverageOverlay.Draw(b, session.Farm, swapTarget, original, valid, secondary: true);
+            CoverageOverlay.Draw(b, session.Location, swapTarget, original, valid, secondary: true);
         Color tint = valid ? (swapping ? new Color(255, 207, 105) : Ui.Accent) : new Color(244, 107, 99);
         Rectangle r = TileRect(cursor);
         b.Draw(Game1.staminaRect, r, tint * 0.24f);
@@ -305,8 +307,8 @@ internal sealed class ArrangeMenu : EaseMenu
             previewSelection = session.Batch; previewTarget = BatchTarget; previewAt = now;
             previewPlan = session.Batch.At(BatchTarget);
             previewCheck = session.CheckBatch(BatchTarget);
-            previewCoverage = BatchMove.ValidArea(session.Farm, previewPlan.DestinationArea)
-                ? CoverageOverlay.BatchAreas(session.Farm, previewPlan.Entries) : Array.Empty<CoverageOverlay.Area>();
+            previewCoverage = BatchMove.ValidArea(session.Location, previewPlan.DestinationArea)
+                ? CoverageOverlay.BatchAreas(session.Location, previewPlan.Entries) : Array.Empty<CoverageOverlay.Area>();
         }
         return previewCheck!;
     }
@@ -315,7 +317,7 @@ internal sealed class ArrangeMenu : EaseMenu
         if (session.Batch == null)
         {
             Rectangle area = BatchMove.Between(selectionCorner ?? cursor, cursor);
-            Color color = BatchMove.ValidArea(session.Farm, area) ? Ui.Accent : new Color(244, 107, 99);
+            Color color = BatchMove.ValidArea(session.Location, area) ? Ui.Accent : new Color(244, 107, 99);
             var screen = new Rectangle(area.X * 64 - Game1.viewport.X, area.Y * 64 - Game1.viewport.Y, area.Width * 64, area.Height * 64);
             b.Draw(Game1.staminaRect, screen, color * 0.16f); Ui.Outline(b, screen, color, 3);
         }

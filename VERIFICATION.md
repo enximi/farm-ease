@@ -1,5 +1,37 @@
 # 验证记录 · 2026-10-08
 
+## GardenEase 1.10.0 温室整理 · 2026-10-20
+
+- 将整理会话及对象搬移、交换、批量框选、撤销、范围预览、光照处理从 Farm 扩展为当前 GameLocation；统一入口、房主校验、本地显示及环境声刷新只接受农场室外或 IsGreenhouse 地图。会话仍绑定实际地图实例，换图结束，不跨地图搬运；占位冲突与撤销失效检查继续按地图区分。牧草自动疏植在入口与执行层均保留 Farm 限制。
+- 只读核对本机 1.6.15 原版果树种植、成长与绘制逻辑，允许温室 Stone 地砖落点，移动和撤销时按落点更新 GreenHouseTileTree 树根底图。保留原对象、生长/果实/浇水/肥料/库存/加工状态；原有树间距、未成熟果树邻格、碰撞与容器锁检查继续生效。
+- 只读解包本机 Greenhouse 地图：20 × 24，120 格 Diggable 耕种区，石质地砖及出口 Warp (10,24)。作物仍限 Diggable，温室出口与门前一格、Action/TouchAction 及 NoFurniture 格不可放置；按目标温室补充 NoFurniture 检查，避免房主在室外时读取本屏状态放宽限制。小地图小于视口时居中，较大地图沿用滚动。
+- Release 编译零警告、零错误，Git 差异空白检查通过。遵守项目要求，未编写测试、未启动游戏、未生成 ZIP。温室单件/交换/批量/撤销、果树落点、缩放镜头、多人/分屏实际同步与存读档仍待实机确认；第三方温室地图行为未验证。
+- 确认游戏关闭后只替换 GardenEase 的 DLL、manifest、README；构建/dist/正式安装逐字节一致。其他 Mod（含 Automate、TractorMod）、配置、存档和语言共 90 个文件摘要不变。备份：`.work/backups/garden-greenhouse-20261020-013606-840421`；证据：`.work/verification/garden-greenhouse-install.json`；DLL SHA-256：`01f22b1cfcc9e5800b0e1b6ddd377a86c4789779fd37966586433257e24ec05f`。
+
+## StorageEase 1.5.3 原版推动后远程访问修复 · 2026-10-20
+
+- 用户场景为工具敲击推动箱子、本地双人分屏。只读核对本机 1.6.15 Chest 推动与 GameLocation 更新路径：原版先更新 TileLocation 和地图对象表，再播放本屏推动动画；远处地图不推进该动画，localKickStartTile 可能一直保留。旧版 Available 无条件拒绝此标记，因此刷新目录仍无法访问。该结论来自源码分析，未在游戏中复现。
+- 现在校验箱子实际落位及对象身份，只在当前屏所在地图等待推动动画；不清除动画，不修改联网推动字段、远程开关或箱内物品。远程开箱、制作取材和房主授权共用修复，保留原有坐标、ID、实例、操作锁与事务复核。位置快照过期时请求刷新，并区分位置变化、推动中、隐藏和远程关闭提示。
+- Release 编译零警告、零错误，Git 差异空白检查通过。未编写测试、未启动游戏、未生成 ZIP。双人分屏中一人推动、另一人在远处访问及实际取放，以及远程联机行为仍待实机确认。
+- 确认游戏关闭后只更新 StorageEase 的 DLL、manifest、README；构建/dist/正式安装逐字节一致。其他 Mod、配置、存档与语言共 64 个文件摘要未变。备份：`.work/backups/storage-pushed-chest-20261020-003354-495977`；证据：`.work/verification/storage-pushed-chest-install.json`；DLL SHA-256：`27603f4e93e67fb6432ce445c04835da0922cdc2b87df6d2a176adf74dbf50e9`。
+
+## TravelEase 1.5.1 沙漠矿洞直达 · 2026-10-20
+
+- 「选择目的地 → 远方」新增「沙漠矿洞 / 骷髅洞穴」，总计 20 个目的地。落点为 SkullCave (3,4)，与原版离开骷髅矿层时返回大厅的位置一致；已只读解包本机地图确认有地板、无 Buildings 障碍，邻近 (3,3) 的 SkullDoor，远离 (7,9) 出口。
+- 大厅沿用沙漠可达性检查，不修改钥匙或开门状态；下矿由原版 SkullDoor 处理钥匙、首次解锁任务与进入第 121 层的流程。SkullCave 加入稳定返回地点，随机矿层仍不记录。继续使用既有安全落点、骑马传送和活动限制。
+- TravelEase Release 编译零警告、零错误，Git 差异空白检查通过。未编写测试、未启动游戏、未生成 ZIP；实际洞内落点、开门下矿、骑马与多人/分屏行为待实机确认。
+- 游戏关闭时仅更新 TravelEase 的 DLL、manifest、README，Release/dist/正式安装逐字节一致；其他 Mod、配置、存档及语言共 46 个文件摘要未变。备份：`.work/backups/travel-skull-20261020-000014-044306`；证据：`.work/verification/travel-skull-install.json`；DLL SHA-256：`5035a7868e77693ff888b8ed678401fd24507d719cd8bf5f41a3fc53bbe2e5cf`。
+
+## TravelEase 1.5.0 温泉泡澡、屋内回家与罗宾家 · 2026-10-19
+
+- 新增「温泉泡澡」「回家屋内」直达操作及目的地入口；新增「罗宾家 / 木匠店」落在 Mountain (12,26)，紧邻原版正门 (12,25)，保留门锁、营业时间与日程。总计 19 个目的地。
+- 只读解包本机 BathHouse_Pool 地图：池水 Back 图块为 bathhouse_tiles 的 108 / 78，没有普通 Water 属性；默认落点 (13,15)。只在池水图块中搜索，保留障碍、玩家占用、触发格与出口检查。铁路与池内目的地共用夏季地震解锁条件；骑马时拒绝直接泡澡。
+- 核对原版 BathHousePool.cleanupBeforePlayerExit、Farmer.changeIntoSwimsuit/changeOutOfSwimSuit 与恢复体力逻辑、Game1 的 LocationRequest.OnWarp 时序。到达池内后启用原生泳装与游泳状态，静止恢复仍由原版处理；传送离开温泉时恢复普通服装、行走、游泳计时与绘制偏移。返回位置按屏幕保存泳态。入池遇剧情时不覆盖剧情状态。
+- 温泉内 R3 / F8 长按回家及「回家」直接进入该玩家自己的住宅；「家门口」始终落在屋外。「回家屋内」使用 getEntryLocation 适配住宅/小屋及升级，避开家具与其他玩家，入场回调重应用安全落点，避免 FarmHouse.resetLocalState 覆盖落点。回屋不会触发睡觉。
+- 共享菜单仅在温泉池放开游泳时浏览，具体功能默认仍拒绝游泳，只有传送显式允许。TravelEase 为菜单首选提供者，本机仅更新 TravelEase 即可；其余七个项目也完成 Release 编译兼容检查，全部零警告、零错误。Git 差异空白检查通过。未编写测试，未启动游戏，未生成 ZIP。
+- 确认游戏关闭后备份并仅替换 TravelEase 的 DLL、manifest、README；Release、dist、正式安装逐字节一致。其他 Mod、配置、存档与语言共 46 个文件摘要不变。备份：`.work/backups/travel-bath-20261019-235127-664028`；证据：`.work/verification/travel-bath-install.json`。DLL SHA-256：`b76f94f9cae42f9e53bdf6e1a65036bce88dd5bee18352030537de41f538da39`。
+- 待实机确认：菜单和手柄在池内的操作、恢复体力、出池衣着/速度、屋内家具避让、回到池中、入场剧情、远程联机与本地分屏；第三方温泉地图替换需单独适配。
+
 目标：Stardew Valley 1.6.15、SMAPI 4.5.2、macOS。使用 .NET 8.0.425 编译为 .NET 6。
 
 

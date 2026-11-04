@@ -37,7 +37,7 @@ internal sealed class GardenReply
     public bool Restored { get; set; }
 }
 
-// Only the host mutates farm state, processing each command to completion.
+// Only the host mutates location state, processing each command to completion.
 // Editors have independent sessions and reserve their selected source tiles.
 internal sealed class GardenNetwork
 {
@@ -60,11 +60,11 @@ internal sealed class GardenNetwork
         internal long LastSeen = Environment.TickCount64;
         internal int Sequence;
         internal GardenReply? LastReply;
-        internal HostSession(long player, string id, Farm farm, Farmer actor)
+        internal HostSession(long player, string id, GameLocation location, Farmer actor)
         {
-            Player = player; Id = id; Moves = new(farm, actor);
-            foreach (var pair in farm.objects.Pairs) Known[(true, pair.Key)] = pair.Value;
-            foreach (var pair in farm.terrainFeatures.Pairs) Known[(false, pair.Key)] = pair.Value;
+            Player = player; Id = id; Moves = new(location, actor);
+            foreach (var pair in location.objects.Pairs) Known[(true, pair.Key)] = pair.Value;
+            foreach (var pair in location.terrainFeatures.Pairs) Known[(false, pair.Key)] = pair.Value;
         }
         internal bool Unchanged(Vector2 tile, bool objects)
         {
@@ -73,8 +73,8 @@ internal sealed class GardenNetwork
             return ReferenceEquals(now, known);
         }
         private object? Read(Vector2 tile, bool objects) => objects
-            ? Moves.Farm.objects.TryGetValue(tile, out var obj) ? obj : null
-            : Moves.Farm.terrainFeatures.TryGetValue(tile, out var terrain) ? terrain : null;
+            ? Moves.Location.objects.TryGetValue(tile, out var obj) ? obj : null
+            : Moves.Location.terrainFeatures.TryGetValue(tile, out var terrain) ? terrain : null;
         internal void Observe(Vector2 tile)
         {
             foreach (bool objects in new[] { false, true })
@@ -185,7 +185,7 @@ internal sealed class GardenNetwork
         {
             foreach (var session in sessions.Values.ToArray())
                 if (now - session.LastSeen > 30000 || !CanEdit(session.Player, out var editor)
-                    || !ReferenceEquals(editor?.currentLocation, session.Moves.Farm)) sessions.Remove(session.Player);
+                    || !ReferenceEquals(editor?.currentLocation, session.Moves.Location)) sessions.Remove(session.Player);
             for (int i = 0; i < 16 && incoming.TryDequeue(out var entry); i++)
             {
                 try { Process(entry.Player, entry.Request); }
@@ -219,7 +219,7 @@ internal sealed class GardenNetwork
     private bool CanEdit(long player, out Farmer? actor)
     {
         actor = Game1.getOnlineFarmers().FirstOrDefault(farmer => farmer.UniqueMultiplayerID == player);
-        return !saving && actor?.currentLocation is Farm && actor.health > 0 && !actor.UsingTool
+        return !saving && actor != null && ArrangeLocation.Supports(actor.currentLocation) && actor.health > 0 && !actor.UsingTool
             && !actor.isRidingHorse() && !actor.swimming.Value && !Game1.isFestival() && !Game1.eventUp;
     }
     private void Process(long player, GardenRequest request)
@@ -234,7 +234,7 @@ internal sealed class GardenNetwork
         }
         if (!CanEdit(player, out Farmer? actor))
         {
-            reply.Message = "请先回到农场室外，结束工具、活动或过夜操作。";
+            reply.Message = "请先进入农场室外或温室，结束工具、活动或过夜操作。";
             Reply(player, reply); return;
         }
         if (request.Action == "Open")
@@ -251,14 +251,14 @@ internal sealed class GardenNetwork
                 Reply(player, reply); return;
             }
             if (request.Sequence != 1) { reply.Message = "整理请求顺序异常，请重新打开。"; Reply(player, reply); return; }
-            if (existing == null) sessions.Add(player, new HostSession(player, request.Session, (Farm)actor!.currentLocation, actor));
+            if (existing == null) sessions.Add(player, new HostSession(player, request.Session, actor!.currentLocation, actor));
         }
         if (!sessions.TryGetValue(player, out var session) || session.Id != request.Session)
         {
             reply.Message = "整理会话已结束，请重新打开。";
             Reply(player, reply); return;
         }
-        if (!ReferenceEquals(actor!.currentLocation, session.Moves.Farm))
+        if (!ReferenceEquals(actor!.currentLocation, session.Moves.Location))
         {
             sessions.Remove(player); reply.Message = "所在地图已改变，请重新打开整理。"; Reply(player, reply); return;
         }
@@ -279,7 +279,7 @@ internal sealed class GardenNetwork
             case "Spread":
             {
                 // 房主以当前世界生成完整计划；重试仍使用会话序号去重。
-                var reserved = sessions.Values.Where(s => s.Player != session.Player && ReferenceEquals(s.Moves.Farm, moves.Farm))
+                var reserved = sessions.Values.Where(s => s.Player != session.Player && ReferenceEquals(s.Moves.Location, moves.Location))
                     .SelectMany(s => s.Moves.ReservedTiles).ToHashSet();
                 int before = moves.UndoCount;
                 reply.Message = moves.SpreadPasture(reserved);
@@ -293,11 +293,11 @@ internal sealed class GardenNetwork
             case "SelectBatch":
             {
                 var area = new Rectangle(request.X, request.Y, request.Width, request.Height);
-                if (!BatchMove.ValidArea(moves.Farm, area)) { reply.Message = $"框选需在农场内，最多 {BatchMove.MaxTiles} 格。"; break; }
+                if (!BatchMove.ValidArea(moves.Location, area)) { reply.Message = $"框选需在当前地图内，最多 {BatchMove.MaxTiles} 格。"; break; }
                 var tiles = BatchMove.Tiles(area).ToArray();
                 if (ReservedByOther(session, tiles) is string conflict) { reply.Message = conflict; break; }
                 if (tiles.Any(t => !session.Unchanged(t, true) || !session.Unchanged(t, false))
-                    || request.Expected != DescribeArea(moves.Farm, area))
+                    || request.Expected != DescribeArea(moves.Location, area))
                 {
                     foreach (var t in tiles) session.Observe(t);
                     moves.Cancel(); reply.Message = "选区已发生变化，请等同步后重新框选。"; break;
@@ -309,11 +309,11 @@ internal sealed class GardenNetwork
             {
                 if (moves.Batch == null) { reply.Message = "请重新框选需要搬移的区域。"; break; }
                 var plan = moves.Batch.At(tile);
-                if (!BatchMove.ValidArea(moves.Farm, plan.DestinationArea)) { reply.Message = "整组选区超出农场边界。"; break; }
+                if (!BatchMove.ValidArea(moves.Location, plan.DestinationArea)) { reply.Message = "整组选区超出当前地图边界。"; break; }
                 if (ReservedByOther(session, plan.Affected) is string conflict) { reply.Message = conflict; break; }
                 var targetTiles = BatchMove.Tiles(plan.DestinationArea).ToArray();
                 if (targetTiles.Any(t => !session.Unchanged(t, true) || !session.Unchanged(t, false))
-                    || request.Expected != DescribeArea(moves.Farm, plan.DestinationArea))
+                    || request.Expected != DescribeArea(moves.Location, plan.DestinationArea))
                 {
                     foreach (var t in targetTiles) session.Observe(t);
                     reply.Message = "目标区域已发生变化，整批未搬移；请等同步后再次确认。"; break;
@@ -328,21 +328,21 @@ internal sealed class GardenNetwork
                 break;
             }
             case "Select":
-                if (!moves.Farm.isTileOnMap(tile)) { reply.Message = "超出农场边界。"; break; }
+                if (!moves.Location.isTileOnMap(tile)) { reply.Message = "超出当前地图边界。"; break; }
                 if (ReservedByOther(session, new[] { tile }) is string selectConflict) { reply.Message = selectConflict; break; }
                 if (!session.Unchanged(tile, true) || !session.Unchanged(tile, false)
-                    || request.Expected != Describe(moves.Farm, tile))
+                    || request.Expected != Describe(moves.Location, tile))
                 {
                     session.Observe(tile); moves.Cancel();
                     reply.Message = "这一格已发生变化，请等同步后重新选择。"; break;
                 }
                 moves.Cancel(); reply.Message = moves.Select(tile); break;
             case "Place":
-                if (!moves.Farm.isTileOnMap(tile) || moves.Selected == null || moves.Source is not Vector2 source)
+                if (!moves.Location.isTileOnMap(tile) || moves.Selected == null || moves.Source is not Vector2 source)
                 { reply.Message = "请重新选择需要搬移的对象。"; break; }
                 if (ReservedByOther(session, new[] { source, tile }) is string placeConflict) { reply.Message = placeConflict; break; }
                 if (!session.Unchanged(tile, true) || !session.Unchanged(tile, false)
-                    || request.Expected != Describe(moves.Farm, tile, moves.Selected.ObjectLayer))
+                    || request.Expected != Describe(moves.Location, tile, moves.Selected.ObjectLayer))
                 {
                     session.Observe(tile); reply.Message = "目标格已发生变化，请等同步后再次确认。"; break;
                 }
@@ -371,7 +371,7 @@ internal sealed class GardenNetwork
     {
         var affected = tiles.ToHashSet();
         foreach (var other in sessions.Values)
-            if (other.Player != session.Player && ReferenceEquals(other.Moves.Farm, session.Moves.Farm)
+            if (other.Player != session.Player && ReferenceEquals(other.Moves.Location, session.Moves.Location)
                 && other.Moves.ReservedTiles.Any(affected.Contains))
                 return "这格已被其他玩家选中，请选择别处，或等对方放下 / 取消。";
         return null;
@@ -380,7 +380,7 @@ internal sealed class GardenNetwork
     {
         var changed = session.Moves.LastChanged.ToHashSet();
         foreach (var other in sessions.Values)
-            if (other.Player != session.Player && ReferenceEquals(other.Moves.Farm, session.Moves.Farm))
+            if (other.Player != session.Player && ReferenceEquals(other.Moves.Location, session.Moves.Location))
                 other.Moves.InvalidateUndo(changed);
         // Keep other editors' Known snapshots unchanged: their next command at
         // an affected tile must notice the change and require a fresh confirmation.
@@ -394,30 +394,30 @@ internal sealed class GardenNetwork
         if (session.Moves.Source is Vector2 selected) { reply.X = (int)selected.X; reply.Y = (int)selected.Y; }
         reply.UndoCount = session.Moves.UndoCount;
     }
-    internal static string DescribeArea(Farm farm, Rectangle area)
+    internal static string DescribeArea(GameLocation location, Rectangle area)
     {
-        if (!BatchMove.ValidArea(farm, area)) return "";
+        if (!BatchMove.ValidArea(location, area)) return "";
         var description = new StringBuilder();
         foreach (var tile in BatchMove.Tiles(area))
             foreach (bool objects in new[] { false, true })
             {
-                string value = Describe(farm, tile, objects);
+                string value = Describe(location, tile, objects);
                 description.Append(value.Length).Append(':').Append(value).Append(';');
             }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(description.ToString())));
     }
-    internal static string Describe(Farm farm, Vector2 tile, bool? objectLayer = null)
+    internal static string Describe(GameLocation location, Vector2 tile, bool? objectLayer = null)
     {
-        var item = ArrangeItem.Read(farm, tile, objectLayer);
+        var item = ArrangeItem.Read(location, tile, objectLayer);
         if (item?.IsTree == true)
         {
             string species = item.Value is StardewValley.TerrainFeatures.Tree tree ? tree.treeType.Value
                 : ((StardewValley.TerrainFeatures.FruitTree)item.Value).treeId.Value;
             return item.Value.GetType().FullName + ":" + species + ":" + (item.Tapper?.QualifiedItemId ?? "");
         }
-        if (objectLayer != false && farm.objects.TryGetValue(tile, out var obj)) return obj.GetType().FullName + ":" + obj.QualifiedItemId;
+        if (objectLayer != false && location.objects.TryGetValue(tile, out var obj)) return obj.GetType().FullName + ":" + obj.QualifiedItemId;
         if (objectLayer == true) return "";
-        if (!farm.terrainFeatures.TryGetValue(tile, out var terrain)) return "";
+        if (!location.terrainFeatures.TryGetValue(tile, out var terrain)) return "";
         if (terrain is StardewValley.TerrainFeatures.Grass grass)
             return terrain.GetType().FullName + ":" + grass.grassType.Value + ":" + grass.numberOfWeeds.Value;
         return terrain.GetType().FullName + ":" + (terrain is StardewValley.TerrainFeatures.Flooring floor ? floor.whichFloor.Value

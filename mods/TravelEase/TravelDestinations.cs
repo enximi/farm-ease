@@ -8,7 +8,7 @@ namespace TravelEase;
 
 internal static class TravelDestinations
 {
-    private sealed record Destination(string Id, string Group, string Title, string Location, int X, int Y, string Hint)
+    private sealed record Destination(string Id, string Group, string Title, string Location, int X, int Y, string Hint, bool Swimming = false)
     {
         internal Vector2 Tile => new(X, Y);
         internal string? Locked => LockReason(Location, Tile);
@@ -25,11 +25,14 @@ internal static class TravelDestinations
         new("beach", "town", "海滩", "Beach", 20, 5, "海滩北侧。"),
         new("pier", "town", "鱼店码头", "Beach", 30, 35, "威利鱼店门外的码头。"),
         new("mountain", "wild", "山上", "Mountain", 31, 20, "山地湖泊附近。"),
+        new("robin", "wild", "罗宾家 / 木匠店", "Mountain", 12, 26, "直达木匠店门口；进门和营业时间仍遵守原版规则。"),
         new("mine", "wild", "矿洞", "Mine", 18, 12, "普通矿洞入口大厅；电梯仍使用已解锁楼层。"),
         new("railroad", "wild", "铁路 / 温泉", "Railroad", 10, 58, "温泉入口外，铁路区域开放后可用。"),
+        new("bath", "wild", "温泉泡澡", "BathHouse_Pool", 13, 15, "直达温泉池；静止后按原版规则恢复体力和生命，请先下马。", true),
         new("quarry", "wild", "采石场", "Mountain", 110, 20, "采石场西侧，桥修复后可用。"),
         new("woods", "wild", "秘密森林", "Woods", 55, 15, "秘密森林入口内侧，入口大木头清除后可用。"),
         new("desert", "far", "沙漠", "Desert", 18, 28, "巴士落客区；巴士修复后免费传送。"),
+        new("skull", "far", "沙漠矿洞 / 骷髅洞穴", "SkullCave", 3, 4, "直达洞内大厅；下矿仍需按原版使用骷髅钥匙开门。"),
         new("island", "far", "姜岛码头", "IslandSouth", 21, 43, "修好船并由当前玩家正常登岛一次后，免费传送到码头。")
     };
 
@@ -40,14 +43,16 @@ internal static class TravelDestinations
             api.RegisterSection("travel.destinations." + groups[i].Item1, "travel.destinations", groups[i].Item2,
                 "选择落点；未解锁的目的地会显示开放条件。", i * 10);
         api.RegisterAction("travel.destinations.farm", "travel.farm", () => "家门口",
-            () => "回到当前住宅门外，自动避开障碍。", () => travel.GoHome(), () => true, -10);
+            () => "回到当前住宅门外，自动避开障碍。", () => travel.GoHomeOutside(), () => true, -10);
+        api.RegisterAction("travel.destinations.farm", "travel.destination.inside", () => "回家屋内",
+            () => "回到自己住宅的室内入口附近，泡澡时也能直接回屋。", () => travel.GoHomeInside(), () => true, -5);
         for (int i = 0; i < Places.Length; i++)
         {
             var place = Places[i];
             api.RegisterAction("travel.destinations." + place.Group, "travel.destination." + place.Id,
                 () => place.Title + (place.Locked == null ? "" : "（未解锁）"),
                 () => place.Locked ?? place.Hint,
-                () => travel.Go(place.Location, place.Tile, place.Title), () => place.Locked == null, i * 10);
+                () => travel.Go(place.Location, place.Tile, place.Title, place.Swimming), () => place.Locked == null, i * 10);
         }
     }
 
@@ -56,7 +61,8 @@ internal static class TravelDestinations
     internal static string? LockReason(string location, Vector2 tile)
     {
         if (!Context.IsWorldReady) return "请先进入存档。";
-        if (location == "Railroad" && Game1.stats.DaysPlayed < Mountain.daysBeforeLandslide)
+        if ((location == "Railroad" || location.StartsWith("BathHouse_", StringComparison.Ordinal))
+            && Game1.stats.DaysPlayed < Mountain.daysBeforeLandslide)
             return "铁路与温泉尚未开放，等待第一年夏季地震后通路打开。";
         if (location == "Mountain" && tile.X >= 100
             && !Utility.doesMasterPlayerHaveMailReceivedButNotMailForTomorrow("ccCraftsRoom"))
@@ -68,7 +74,7 @@ internal static class TravelDestinations
             if (forest.resourceClumps.Any(clump => clump.occupiesTile(1, 6) || clump.occupiesTile(1, 7)))
                 return "请先清除秘密森林入口的大木头。";
         }
-        if (location == "Desert" && !Game1.isLocationAccessible("Desert"))
+        if ((location == "Desert" || location == "SkullCave") && !Game1.isLocationAccessible("Desert"))
             return "请先通过社区中心或 Joja 修复巴士。";
         if (location == "IslandSouth")
         {

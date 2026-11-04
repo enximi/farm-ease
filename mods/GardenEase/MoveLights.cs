@@ -9,29 +9,29 @@ namespace GardenEase;
 internal sealed class MoveLights
 {
     private sealed record Entry(LightSource Light, string OldId, string NewId, Vector2 OldPosition, Vector2 Offset, bool Registered);
-    private readonly Farm farm;
+    private readonly GameLocation location;
     private readonly List<Entry> entries = new();
-    internal MoveLights(Farm farm) => this.farm = farm;
+    internal MoveLights(GameLocation location) => this.location = location;
     internal void Capture(ArrangeItem item, Vector2 from, Vector2 to)
     {
         void CaptureObject(SObject obj)
         {
             if (obj.lightSource is not { } light) return;
             entries.Add(new(light, light.Id, obj.Location == null ? light.Id : obj.GenerateLightSourceId(to), light.position.Value,
-                (to - from) * 64, farm.hasLightSource(light.Id)));
+                (to - from) * 64, location.hasLightSource(light.Id)));
         }
         if (item.PlacedObject is not { } placed) return;
         CaptureObject(placed);
         if (placed is Fence && placed.heldObject.Value is { } torch)
         {
-            // 附件的地图引用不联网，先绑定所在农场才能计算目标灯光标识。
-            torch.Location = farm;
+            // 附件的地图引用不联网，先绑定所在地图才能计算目标灯光标识。
+            torch.Location = location;
             CaptureObject(torch);
         }
     }
     internal void Detach()
     {
-        foreach (var entry in entries) farm.removeLightSource(entry.Light.Id);
+        foreach (var entry in entries) location.removeLightSource(entry.Light.Id);
     }
     internal void Apply(bool restore)
     {
@@ -40,7 +40,7 @@ internal sealed class MoveLights
         {
             entry.Light.Id = restore ? entry.OldId : entry.NewId;
             entry.Light.position.Value = entry.OldPosition + (restore ? Vector2.Zero : entry.Offset);
-            if (entry.Registered) farm.sharedLights.AddLight(entry.Light.Clone());
+            if (entry.Registered) location.sharedLights.AddLight(entry.Light.Clone());
         }
     }
 }

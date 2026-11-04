@@ -36,10 +36,12 @@ public sealed class ModEntry : Mod
         helper.Events.GameLoop.DayStarted += (_, _) => ResetSession();
         helper.Events.Player.Warped += (_, e) => { if (e.IsLocalPlayer) { ResetHold(); sleepShortcut.Clear(); } };
         helper.Events.Display.RenderedHud += OnHud;
-        helper.ConsoleCommands.Add("travelease", "随心往返：travelease [reload|home|sleep]", (_, args) =>
+        helper.ConsoleCommands.Add("travelease", "随心往返：travelease [reload|home|inside|bath|sleep]", (_, args) =>
         {
             if (args.FirstOrDefault() == "reload") ReloadConfig();
             else if (args.FirstOrDefault() == "home") Travel.GoHome();
+            else if (args.FirstOrDefault() == "inside") Travel.GoHomeInside();
+            else if (args.FirstOrDefault() == "bath") Travel.GoBath();
             else if (args.FirstOrDefault() == "sleep") Sleep.Start();
             else Menu.Hub?.Open("travel");
         });
@@ -53,18 +55,24 @@ public sealed class ModEntry : Mod
             api.RegisterAction(section, "travel.sleep." + section, () => "一键睡觉",
                 () => "回到自己的床并结束今天；多人时等待其他玩家，可取消等待。",
                 Sleep.Start, () => !Sleep.IsPending, 90);
-        api.RegisterAction("travel", "travel.home", () => "回家", () => $"长按 {Ui.Button(Config.HomeButton)} / {Ui.Button(Config.KeyboardHomeButton)} 也可回家，松开取消。骑马时连马一起回家。",
+        api.RegisterAction("travel", "travel.home", () => "回家", () => $"长按 {Ui.Button(Config.HomeButton)} / {Ui.Button(Config.KeyboardHomeButton)} 也可回家；在温泉内直接回屋，其余地点回家门口。",
             () => Travel.GoHome(), () => true, 10);
+        api.RegisterAction("travel", "travel.inside", () => "回家屋内", () => "回到自己住宅的室内入口附近；泡澡时也可使用，回屋后恢复日常服装。",
+            () => Travel.GoHomeInside(), () => true, 12);
+        api.RegisterAction("travel", "travel.bath", () => "温泉泡澡", () => TravelDestinations.LockReason("BathHouse_Pool", new Vector2(13, 15)) ?? "直接进入温泉池，静止后按原版规则恢复体力和生命；请先下马。",
+            () => Travel.GoBath(), () => TravelDestinations.LockReason("BathHouse_Pool", new Vector2(13, 15)) == null, 15);
         api.RegisterSection("travel.destinations", "travel", "选择目的地", "选择固定落脚区域，自动避开障碍。", 20);
         api.RegisterAction("travel", "travel.return", () => "返回上个位置", () => Travel.CanReturn ? "返回上次传送前的稳定地点。过夜后清空。" : "先使用一次传送，才有可以返回的位置。",
             () => Travel.Return(), () => Travel.CanReturn, 30);
         TravelDestinations.Register(api, Travel);
     }
 
-    internal bool CanUse(out string reason, bool allowOwnMenu = false, bool allowMounted = false)
+    internal bool CanUse(out string reason, bool allowOwnMenu = false, bool allowMounted = false, bool allowSwimming = false)
     {
         if (Sleep.IsPending) { reason = "正在回床，请等待当前操作完成。"; return false; }
-        if (!Menu.CanUse(out reason, allowOwnMenu, allowMounted)) return false;
+        if (!Menu.CanUse(out reason, allowOwnMenu, allowMounted, allowSwimming)) return false;
+        if (Game1.newDay || Game1.player.passedOut || Game1.player.noMovementPause > 0 || Game1.player.yJumpOffset != 0)
+        { reason = "请等当前动作或过夜流程结束。"; return false; }
         if (allowMounted && Game1.player.mount is { } horse)
         {
             if (!Mounted.IsReady) { reason = "骑马传送补丁未能加载，请先下马或查看 SMAPI 日志。"; return false; }
@@ -86,7 +94,7 @@ public sealed class ModEntry : Mod
         // The shared menu owns its shortcuts; a conflicting custom home key never hijacks it.
         if (e.Button == Menu.Settings.MenuButton || e.Button == Menu.Settings.KeyboardMenuButton) return;
         if (sleepShortcut.Press(e.Button)) { ResetHold(); return; }
-        if ((e.Button == Config.HomeButton || e.Button == Config.KeyboardHomeButton) && CanUse(out _, allowMounted: true))
+        if ((e.Button == Config.HomeButton || e.Button == Config.KeyboardHomeButton) && CanUse(out _, allowMounted: true, allowSwimming: true))
         {
             sleepShortcut.Clear();
             Helper.Input.Suppress(e.Button);
@@ -101,7 +109,7 @@ public sealed class ModEntry : Mod
         Sleep.Update();
         sleepShortcut.Update();
         if (heldHome == SButton.None) return;
-        if (!(Helper.Input.IsDown(heldHome) || Helper.Input.IsSuppressed(heldHome)) || !CanUse(out _, allowMounted: true)) { ResetHold(); return; }
+        if (!(Helper.Input.IsDown(heldHome) || Helper.Input.IsSuppressed(heldHome)) || !CanUse(out _, allowMounted: true, allowSwimming: true)) { ResetHold(); return; }
         Helper.Input.Suppress(heldHome);
         homeElapsed += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
         if (!homeTriggered && homeElapsed >= Config.HomeHoldMilliseconds) { homeTriggered = true; Travel.GoHome(); }

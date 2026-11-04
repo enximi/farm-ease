@@ -10,10 +10,11 @@ internal static class LayoutDisplay
 {
     internal static void OnTerrainChanged(object? sender, TerrainFeatureListChangedEventArgs e)
     {
-        if (e.Location is not Farm farm) return;
+        if (!ArrangeLocation.Supports(e.Location)) return;
+        var location = e.Location;
         foreach (var pair in e.Added)
         {
-            if (!farm.terrainFeatures.TryGetValue(pair.Key, out var current) || !ReferenceEquals(current, pair.Value)
+            if (!location.terrainFeatures.TryGetValue(pair.Key, out var current) || !ReferenceEquals(current, pair.Value)
                 || current.isTemporarilyInvisible) continue;
 
             // 原生网络反序列化先创建作物，随后才由地形字典设置 Tile。
@@ -35,21 +36,22 @@ internal static class LayoutDisplay
             for (int y = -1; y <= 1; y++)
                 for (int x = -1; x <= 1; x++) neighbors.Add(tile + new Vector2(x, y));
         foreach (var tile in neighbors)
-            if (farm.terrainFeatures.TryGetValue(tile, out var ground)
-                && ground is Flooring floor && floor.GetType() == typeof(Flooring)) floor.OnAdded(farm, tile);
+            if (location.terrainFeatures.TryGetValue(tile, out var ground)
+                && ground is Flooring floor && floor.GetType() == typeof(Flooring)) floor.OnAdded(location, tile);
     }
 
     internal static void OnObjectsChanged(object? sender, ObjectListChangedEventArgs e)
     {
-        if (e.Location is not Farm farm) return;
+        if (!ArrangeLocation.Supports(e.Location)) return;
+        var location = e.Location;
         foreach (var pair in e.Added)
         {
             var obj = pair.Value;
             if (ArrangeItem.From(obj) == null || obj.isTemporarilyInvisible
-                || !farm.objects.TryGetValue(pair.Key, out var current) || !ReferenceEquals(current, obj)) continue;
+                || !location.objects.TryGetValue(pair.Key, out var current) || !ReferenceEquals(current, obj)) continue;
             // 原生回调已设置主体位置，但不会给围栏附件补充非联网的 Location。
             // 客机仅修复地图关联；附件坐标与灯光由房主移动后通过原生网络同步。
-            if (obj is Fence && obj.heldObject.Value is Torch torch) torch.Location = farm;
+            if (obj is Fence && obj.heldObject.Value is Torch torch) torch.Location = location;
             if (obj is Chest chest) chest.fixLidFrame();
         }
     }

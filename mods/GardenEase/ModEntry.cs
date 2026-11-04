@@ -18,10 +18,10 @@ public sealed class ModEntry : Mod
         Menu = new(this, () => { }, api =>
         {
             api.RegisterAction("", "garden.arrange", () => "田园巧整",
-                () => Game1.currentLocation is Farm
+                () => ArrangeLocation.Supports(Game1.currentLocation)
                     ? Context.IsMultiplayer ? "可多人同时整理不同格子，各自撤销；时间继续流逝。" : "搬移或交换作物、牧草、树木、道路与设施。支持撤销，整理期间时间暂停。"
-                    : "请先回到农场室外，再开始整理。",
-                OpenArrange, () => Game1.currentLocation is Farm, 20);
+                    : "请先进入农场室外或温室，再开始整理。",
+                OpenArrange, () => ArrangeLocation.Supports(Game1.currentLocation), 20);
             api.RegisterAction("", "garden.pasture", () => "牧草疏植",
                 () => "一键按棋盘格疏植现有牧草，优先鸡舍、畜棚周边；可整批撤销。",
                 () => OpenArrange(true), () => Game1.currentLocation is Farm, 21);
@@ -47,9 +47,11 @@ public sealed class ModEntry : Mod
     {
         if (!Menu.CanUse(out string reason, true)) { Menu.Notify(reason); return; }
         if (Network.UnavailableReason() is string unavailable) { Menu.Notify(unavailable); return; }
-        if (Game1.currentLocation is not Farm farm) { Menu.Notify("请先回到农场室外，再开始整理。"); return; }
+        var location = Game1.currentLocation;
+        if (!ArrangeLocation.Supports(location)) { Menu.Notify("请先进入农场室外或温室，再开始整理。"); return; }
+        if (spreadPasture && location is not Farm) { Menu.Notify("牧草疏植仅在农场室外使用。"); return; }
         Game1.activeClickableMenu?.exitThisMenu(false);
-        Game1.activeClickableMenu = new ArrangeMenu(this, farm, spreadPasture);
+        Game1.activeClickableMenu = new ArrangeMenu(this, location, spreadPasture);
     }
     internal void Report(Exception error) => Monitor.Log(error.ToString(), LogLevel.Error);
 }

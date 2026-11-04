@@ -8,14 +8,14 @@ namespace GardenEase;
 
 internal sealed class MoveSession
 {
-    internal Farm Farm { get; }
+    internal GameLocation Location { get; }
     internal Vector2? Source { get; private set; }
     internal ArrangeItem? Selected { get; private set; }
     internal BatchMove? Batch { get; private set; }
     internal bool HasSelection => Selected != null || Batch != null;
     internal IEnumerable<Vector2> ReservedTiles => Batch != null
-        ? Batch.Entries.Where(e => e.Item.IsAt(Farm, e.From)).Select(e => e.From).Distinct()
-        : Source is Vector2 source && Selected?.IsAt(Farm, source) == true ? new[] { source } : Array.Empty<Vector2>();
+        ? Batch.Entries.Where(e => e.Item.IsAt(Location, e.From)).Select(e => e.From).Distinct()
+        : Source is Vector2 source && Selected?.IsAt(Location, source) == true ? new[] { source } : Array.Empty<Vector2>();
     internal Vector2[] LastChanged { get; private set; } = Array.Empty<Vector2>();
     private readonly Farmer actor;
     private readonly HashSet<NetMutex> ownedLocks = new();
@@ -27,7 +27,7 @@ internal sealed class MoveSession
     internal int UndoCount => undo.Count;
     internal Vector2[] UndoTiles => !HasSelection && undo.TryPeek(out var move) ? move.Tiles : Array.Empty<Vector2>();
     private bool undoInvalidated;
-    internal MoveSession(Farm farm, Farmer? actor = null) { Farm = farm; this.actor = actor ?? Game1.player; }
+    internal MoveSession(GameLocation location, Farmer? actor = null) { Location = location; this.actor = actor ?? Game1.player; }
 
     internal void InvalidateUndo(ISet<Vector2> changed)
     {
@@ -43,13 +43,13 @@ internal sealed class MoveSession
     internal string Select(Vector2 tile)
     {
         // A tree and its tapper move together. Other objects take priority over ground.
-        var item = ArrangeItem.Read(Farm, tile);
+        var item = ArrangeItem.Read(Location, tile);
         if (item == null) return "请选择耕地、牧草、树木、果树、道路或支持的农场设施。";
         if (item.UnavailableReason() is string reason) return reason;
         if (HasLargeTerrain(tile)) return "这格上有大型地形，暂不能搬移。";
         CollisionMask mask = CollisionMask.All & ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring | CollisionMask.Farmers);
         if (item.PlacedObject != null) mask &= ~CollisionMask.Objects;
-        if (item.HasCollision(Farm, tile, mask)) return "这格上还有物体或动物，请先移开。";
+        if (item.HasCollision(Location, tile, mask)) return "这格上还有物体或动物，请先移开。";
         Source = tile;
         Selected = item;
         return $"已选中{item.Name}，移动光标后确认。";
@@ -58,20 +58,20 @@ internal sealed class MoveSession
     internal string SelectBatch(Rectangle area)
     {
         Cancel();
-        string result = BatchMove.Select(Farm, area, out var batch);
+        string result = BatchMove.Select(Location, area, out var batch);
         Batch = batch;
         return result;
     }
-    internal BatchMove.Check CheckBatch(Vector2 target) => Batch?.At(target).Validate(Farm, actor)
+    internal BatchMove.Check CheckBatch(Vector2 target) => Batch?.At(target).Validate(Location, actor)
         ?? new("请先框选需要搬移的区域。", new());
     internal string PlaceBatch(Vector2 target)
     {
         if (Batch == null) return "请先框选需要搬移的区域。";
         var plan = Batch.At(target);
-        if (plan.Validate(Farm, actor).Reason is string reason) return reason + " 整批未搬移。";
-        plan.Transfer(Farm, actor);
+        if (plan.Validate(Location, actor).Reason is string reason) return reason + " 整批未搬移。";
+        plan.Transfer(Location, actor);
         LastChanged = plan.Affected;
-        undo.Push(new Move(plan.Origin, target, null, null, plan.Reverse(Farm)));
+        undo.Push(new Move(plan.Origin, target, null, null, plan.Reverse(Location)));
         Cancel();
         return $"已整体搬移 {plan.Entries.Length} 个对象，状态保留；可一步撤销。";
     }
@@ -79,19 +79,20 @@ internal sealed class MoveSession
     internal string SpreadPasture(ISet<Vector2>? reserved = null)
     {
         if (HasSelection) return "请先放下或取消当前选中，再疏植牧草。";
-        var plan = PasturePlanner.Plan(Farm, reserved ?? new HashSet<Vector2>());
+        if (Location is not Farm farm) return "牧草疏植仅在农场室外使用。";
+        var plan = PasturePlanner.Plan(farm, reserved ?? new HashSet<Vector2>());
         if (plan == null) return "没有需要疏植的牧草，或没有合适空地；现有牧草保持原位。";
-        if (plan.Validate(Farm, actor).Reason is string reason) return reason + " 整批未疏植。";
-        plan.Transfer(Farm, actor);
+        if (plan.Validate(Location, actor).Reason is string reason) return reason + " 整批未疏植。";
+        plan.Transfer(Location, actor);
         LastChanged = plan.Affected;
-        undo.Push(new Move(plan.Entries[0].From, plan.Entries[0].To, null, null, plan.Reverse(Farm)));
+        undo.Push(new Move(plan.Entries[0].From, plan.Entries[0].To, null, null, plan.Reverse(Location)));
         return $"已疏植 {plan.Entries.Length} 格牧草，其余留在原处；X / Z 可整批撤销。";
     }
 
     internal ArrangeItem? SwapTarget(Vector2 tile)
     {
         if (Selected == null || Source == tile) return null;
-        var target = ArrangeItem.Read(Farm, tile, Selected.ObjectLayer);
+        var target = ArrangeItem.Read(Location, tile, Selected.ObjectLayer);
         return target != null && Selected.CanSwapWith(target) ? target : null;
     }
 
@@ -99,7 +100,7 @@ internal sealed class MoveSession
     {
         if (Source is not Vector2 source || Selected == null) return "请先选择需要整理的对象。";
         if (source == tile) return "请选择另一格，或取消选中。";
-        if (!Selected.IsAt(Farm, source)) return "原位置已发生变化，请取消后重新选择。";
+        if (!Selected.IsAt(Location, source)) return "原位置已发生变化，请取消后重新选择。";
         if (Selected.UnavailableReason() is string unavailable) return unavailable;
         var swapped = SwapTarget(tile);
         if (InvalidPlacement(tile, Selected, swapped) is string reason) return reason;
@@ -111,37 +112,37 @@ internal sealed class MoveSession
     private bool HasLargeTerrain(Vector2 tile)
     {
         var bounds = new Rectangle((int)tile.X * 64, (int)tile.Y * 64, 64, 64);
-        return Farm.resourceClumps.Any(clump => clump.occupiesTile((int)tile.X, (int)tile.Y))
-            || (Farm.largeTerrainFeatures != null && Farm.largeTerrainFeatures.Any(feature => feature.getBoundingBox().Intersects(bounds)));
+        return Location.resourceClumps.Any(clump => clump.occupiesTile((int)tile.X, (int)tile.Y))
+            || (Location.largeTerrainFeatures != null && Location.largeTerrainFeatures.Any(feature => feature.getBoundingBox().Intersects(bounds)));
     }
 
     private string? InvalidPlacement(Vector2 tile, ArrangeItem incoming, ArrangeItem? outgoing)
     {
-        if (!Farm.isTileOnMap(tile)) return "超出农场边界。";
+        if (!Location.isTileOnMap(tile)) return "超出当前地图边界。";
         if (incoming.UnavailableReason(ownedLocks) is string unavailable) return unavailable;
         if (outgoing?.UnavailableReason(ownedLocks) is string outgoingUnavailable) return outgoingUnavailable;
-        if (!ReferenceEquals(incoming.At(Farm, tile), outgoing?.Value))
+        if (!ReferenceEquals(incoming.At(Location, tile), outgoing?.Value))
             return "这里已有其他对象；耕地、牧草、树木、道路和设施只能在各自类别内交换。";
-        if (outgoing != null && !outgoing.IsAt(Farm, tile)) return "目标对象或树上采集器已发生变化，请重新选择。";
+        if (outgoing != null && !outgoing.IsAt(Location, tile)) return "目标对象或树上采集器已发生变化，请重新选择。";
         if (HasLargeTerrain(tile)) return "这里有大型地形，不能放置。";
-        if (!Farm.isTilePlaceable(tile, incoming.PassableFor(actor))) return "这里不能放置，可能是水域或地图限制区域。";
-        if (incoming.Dirt != null && Farm.doesTileHaveProperty((int)tile.X, (int)tile.Y, "Diggable", "Back") == null)
+        if (!ArrangeLocation.CanPlace(Location, tile, incoming.PassableFor(actor))) return "这里不能放置，可能是水域或地图限制区域。";
+        if (incoming.Dirt != null && Location.doesTileHaveProperty((int)tile.X, (int)tile.Y, "Diggable", "Back") == null)
             return "这里不能耕种。";
-        if (incoming.Object?.IsSprinkler() == true && Farm.doesTileHavePropertyNoNull((int)tile.X, (int)tile.Y, "NoSprinklers", "Back") == "T")
+        if (incoming.Object?.IsSprinkler() == true && Location.doesTileHavePropertyNoNull((int)tile.X, (int)tile.Y, "NoSprinklers", "Back") == "T")
             return "这里不能放置洒水器。";
 
         CollisionMask mask = CollisionMask.All;
         if (incoming.IsTree)
         {
-            if (!ReferenceEquals(Farm.objects.TryGetValue(tile, out var attachment) ? attachment : null, outgoing?.Tapper))
+            if (!ReferenceEquals(Location.objects.TryGetValue(tile, out var attachment) ? attachment : null, outgoing?.Tapper))
                 return "这里有其他物体，不能放置树木。";
             mask &= ~(CollisionMask.Objects | CollisionMask.TerrainFeatures | CollisionMask.Flooring);
-            if (TreePlacement.Invalid(Farm, tile, incoming, outgoing) is string treeReason) return treeReason;
+            if (TreePlacement.Invalid(Location, tile, incoming, outgoing) is string treeReason) return treeReason;
         }
         else if (incoming.ObjectLayer)
         {
             // Keep passable ground (including protected pasture under fences).
-            if (Farm.terrainFeatures.TryGetValue(tile, out var ground)
+            if (Location.terrainFeatures.TryGetValue(tile, out var ground)
                 && !ArrangeItem.AllowsObject(ground))
                 return "这里有作物、树木或其他地形，请先移开。";
             mask &= ~(CollisionMask.Objects | CollisionMask.TerrainFeatures | CollisionMask.Flooring);
@@ -149,16 +150,16 @@ internal sealed class MoveSession
         else if (outgoing != null)
             mask &= ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring);
         if (incoming.PassableFor(actor)) mask &= ~CollisionMask.Farmers;
-        else if (Farm.IsTileOccupiedBy(tile, CollisionMask.Farmers))
+        else if (Location.IsTileOccupiedBy(tile, CollisionMask.Farmers))
             return "这里有角色，挡路的作物或物体不能放在角色脚下。";
-        if (incoming.HasCollision(Farm, tile, mask, checkPassability: true)) return "这里有障碍、建筑、物体或动物。";
+        if (incoming.HasCollision(Location, tile, mask, checkPassability: true)) return "这里有障碍、建筑、物体或动物。";
         return null;
     }
 
     internal string Place(Vector2 target)
     {
         if (Source is not Vector2 source || Selected == null) return Select(target);
-        if (!Selected.IsAt(Farm, source)) { Cancel(); return "原位置已发生变化，已取消选中。"; }
+        if (!Selected.IsAt(Location, source)) { Cancel(); return "原位置已发生变化，已取消选中。"; }
         if (InvalidTarget(target) is string reason) return reason;
         var item = Selected;
         var swapped = SwapTarget(target);
@@ -176,15 +177,15 @@ internal sealed class MoveSession
             ? "相关位置已被其他玩家整理，旧撤销记录已失效。" : "当前整理会话还没有搬移记录。";
         if (move.Batch is { } batch)
         {
-            if (batch.Validate(Farm, actor).Reason is string batchReason) return "整批暂时无法撤销：" + batchReason;
-            batch.Transfer(Farm, actor);
+            if (batch.Validate(Location, actor).Reason is string batchReason) return "整批暂时无法撤销：" + batchReason;
+            batch.Transfer(Location, actor);
             LastChanged = batch.Affected;
             undo.Pop(); restored = move.From;
             return $"已撤销整批搬移，恢复 {batch.Entries.Length} 个对象的位置。";
         }
         var item = move.Item!;
-        if (!item.IsAt(Farm, move.To) || !ReferenceEquals(item.At(Farm, move.From), move.Swapped?.Value)
-            || (move.Swapped != null && !move.Swapped.IsAt(Farm, move.From)))
+        if (!item.IsAt(Location, move.To) || !ReferenceEquals(item.At(Location, move.From), move.Swapped?.Value)
+            || (move.Swapped != null && !move.Swapped.IsAt(Location, move.From)))
             return "对象位置发生变化，无法安全撤销。";
         if (InvalidPlacement(move.From, item, move.Swapped) is string reason) return "原位置暂时无法恢复：" + reason;
         if (move.Swapped != null && InvalidPlacement(move.To, move.Swapped, item) is string otherReason)
@@ -197,7 +198,7 @@ internal sealed class MoveSession
 
     private void Transfer(Vector2 source, Vector2 target, ArrangeItem item, ArrangeItem? swapped)
     {
-        if (!Context.IsMainPlayer) throw new InvalidOperationException("只有房主可以修改农场布局。");
+        if (!Context.IsMainPlayer) throw new InvalidOperationException("只有房主可以修改布局。");
         var mutexes = item.Mutexes().Concat(swapped?.Mutexes() ?? Enumerable.Empty<NetMutex>()).Distinct().ToArray();
         void Acquire(int index)
         {
@@ -205,7 +206,7 @@ internal sealed class MoveSession
             {
                 CollisionMask sourceMask = CollisionMask.All & ~(CollisionMask.TerrainFeatures | CollisionMask.Flooring | CollisionMask.Farmers);
                 if (item.PlacedObject != null) sourceMask &= ~CollisionMask.Objects;
-                if (HasLargeTerrain(source) || item.HasCollision(Farm, source, sourceMask))
+                if (HasLargeTerrain(source) || item.HasCollision(Location, source, sourceMask))
                     throw new InvalidOperationException("原位置出现了障碍或动物，请稍后再试。");
                 if (InvalidPlacement(target, item, swapped) is string reason) throw new InvalidOperationException(reason);
                 if (swapped != null && InvalidPlacement(source, swapped, item) is string otherReason) throw new InvalidOperationException(otherReason);
@@ -215,13 +216,13 @@ internal sealed class MoveSession
             var mutex = mutexes[index];
             // On the host, polling handles queued native chest-open requests before
             // acquiring our lock. The transaction completes inside the acquired callback.
-            mutex.Update(Farm.farmers);
+            mutex.Update(Location.farmers);
             if (mutex.IsLocked()) throw new InvalidOperationException("箱子正在使用，请稍后再试。");
             bool completed = false;
             try
             {
                 mutex.RequestLock(() => { ownedLocks.Add(mutex); Acquire(index + 1); completed = true; });
-                mutex.Update(Farm.farmers);
+                mutex.Update(Location.farmers);
                 if (!completed) throw new InvalidOperationException("未取得箱子锁，请稍后再试。");
             }
             finally
@@ -236,10 +237,10 @@ internal sealed class MoveSession
 
     private void TransferCore(Vector2 source, Vector2 target, ArrangeItem item, ArrangeItem? swapped)
     {
-        if (source == target || !item.IsAt(Farm, source) || !ReferenceEquals(item.At(Farm, target), swapped?.Value)
-            || (swapped != null && !swapped.IsAt(Farm, target)))
+        if (source == target || !item.IsAt(Location, source) || !ReferenceEquals(item.At(Location, target), swapped?.Value)
+            || (swapped != null && !swapped.IsAt(Location, target)))
             throw new InvalidOperationException("对象位置已发生变化，操作已停止。");
-        var lights = new MoveLights(Farm);
+        var lights = new MoveLights(Location);
         lights.Capture(item, source, target);
         if (swapped != null) lights.Capture(swapped, target, source);
         // Do not call tool/removal/placement actions: those can drop inventory,
@@ -247,12 +248,12 @@ internal sealed class MoveSession
         try
         {
             lights.Detach();
-            item.Remove(Farm, source);
-            swapped?.Remove(Farm, target);
-            item.Add(Farm, target);
-            swapped?.Add(Farm, source);
-            item.Refresh(Farm, target);
-            swapped?.Refresh(Farm, source);
+            item.Remove(Location, source);
+            swapped?.Remove(Location, target);
+            item.Add(Location, target);
+            swapped?.Add(Location, source);
+            item.Refresh(Location, target);
+            swapped?.Refresh(Location, source);
             lights.Apply(restore: false);
         }
         catch (Exception failure)
@@ -260,12 +261,12 @@ internal sealed class MoveSession
             var errors = new List<Exception> { failure };
             void Attempt(Action action) { try { action(); } catch (Exception error) { errors.Add(error); } }
             Attempt(() => lights.Detach());
-            Attempt(() => item.RemoveOwned(Farm, target));
-            if (swapped != null) Attempt(() => swapped.RemoveOwned(Farm, source));
-            Attempt(() => item.Restore(Farm, source));
-            if (swapped != null) Attempt(() => swapped.Restore(Farm, target));
-            Attempt(() => item.Refresh(Farm, source));
-            if (swapped != null) Attempt(() => swapped.Refresh(Farm, target));
+            Attempt(() => item.RemoveOwned(Location, target));
+            if (swapped != null) Attempt(() => swapped.RemoveOwned(Location, source));
+            Attempt(() => item.Restore(Location, source));
+            if (swapped != null) Attempt(() => swapped.Restore(Location, target));
+            Attempt(() => item.Refresh(Location, source));
+            if (swapped != null) Attempt(() => swapped.Refresh(Location, target));
             Attempt(() => lights.Apply(restore: true));
             if (errors.Count > 1) throw new AggregateException("搬移失败，恢复过程中也发生错误。", errors);
             throw;

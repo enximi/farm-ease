@@ -143,7 +143,7 @@ internal sealed class MenuController
         Notify("配置刷新完成；钓鱼参数从下一条鱼生效。");
     }
 
-    internal bool CanUse(out string reason, bool allowOwnMenu = false, bool allowMounted = false)
+    internal bool CanUse(out string reason, bool allowOwnMenu = false, bool allowMounted = false, bool allowSwimming = false)
     {
         reason = "";
         if (!Context.IsWorldReady) reason = "请先进入存档。";
@@ -153,7 +153,8 @@ internal sealed class MenuController
             reason = "请等当前过渡结束。";
         else if (Game1.player.isAnimatingMount || Game1.player.mount is { } mount && (mount.mounting.Value || mount.dismounting.Value))
             reason = "请等上下马动作完成。";
-        else if (Game1.player.UsingTool || (!allowMounted && Game1.player.isRidingHorse()) || Game1.player.swimming.Value)
+        else if (Game1.player.UsingTool || (!allowMounted && Game1.player.isRidingHorse())
+            || (Game1.player.swimming.Value && !(allowSwimming && Game1.currentLocation is StardewValley.Locations.BathHousePool)))
             reason = "请先收起工具、下马或离开水中。";
         else if (Game1.activeClickableMenu != null && !(allowOwnMenu && (ActiveMenu != null || Hub?.IsOpen() == true)))
             reason = "请先关闭当前菜单。";
@@ -165,7 +166,7 @@ internal sealed class MenuController
     {
         if (!IsOwner) { Hub?.Open(sectionId); return; }
         if (!nativeReady) { Notify("农场随心菜单尚未就绪。"); return; }
-        if (!CanUse(out string reason, true, allowMounted: true)) { Notify(reason); return; }
+        if (!CanUse(out string reason, true, allowMounted: true, allowSwimming: true)) { Notify(reason); return; }
         var host = new GameMenu(false);
         int index = host.pages.FindIndex(page => page is HubPage);
         if (index < 0) { Notify("农场随心标签未能创建，请查看 SMAPI 日志。"); return; }
@@ -183,7 +184,7 @@ internal sealed class MenuController
             Mod.Helper.Input.Suppress(e.Button);
             menu.HandleButton(e.Button);
         }
-        else if (IsOwner && (e.Button == Settings.MenuButton || e.Button == Settings.KeyboardMenuButton) && CanUse(out _, allowMounted: true))
+        else if (IsOwner && (e.Button == Settings.MenuButton || e.Button == Settings.KeyboardMenuButton) && CanUse(out _, allowMounted: true, allowSwimming: true))
         {
             Mod.Helper.Input.Suppress(e.Button);
             var action = e.Button == Settings.MenuButton ? MenuHolds.Values.FirstOrDefault(h => h.Enabled()) : null;
@@ -196,7 +197,7 @@ internal sealed class MenuController
     {
         if (holds.Value is not { } hold || hold.Button != button) return;
         holds.Value = null;
-        if (!hold.Triggered && Game1.game1.IsActive && CanUse(out _, allowMounted: true)) Open("");
+        if (!hold.Triggered && Game1.game1.IsActive && CanUse(out _, allowMounted: true, allowSwimming: true)) Open("");
     }
 
     private void TickMenuHold()
@@ -211,7 +212,7 @@ internal sealed class MenuController
         Mod.Helper.Input.Suppress(hold.Button);
         if (hold.Triggered) return;
         // 骑乘是否适用由具体快捷功能决定；计时期间与按下时采用一致的通用检查。
-        if (!Game1.game1.IsActive || !CanUse(out _, allowMounted: true) || !hold.Action.Enabled()) { holds.Value = null; return; }
+        if (!Game1.game1.IsActive || !CanUse(out _, allowMounted: true, allowSwimming: true) || !hold.Action.Enabled()) { holds.Value = null; return; }
         hold.Elapsed += Game1.currentGameTime.ElapsedGameTime.TotalMilliseconds;
         if (hold.Elapsed < Math.Clamp(hold.Action.Milliseconds(), 250, 2000)) return;
         hold.Triggered = true;

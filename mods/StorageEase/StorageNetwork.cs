@@ -219,7 +219,9 @@ internal sealed class StorageNetwork
             else
             {
                 var chests = boxes.Select(b => StorageCatalog.Resolve(b!)).ToList();
-                if (chests.Any(c => c == null || !StorageCatalog.Available(c))) message = "箱子已移动，请刷新后重试。";
+                if (chests.Any(c => c == null)) message = "箱子位置已变化，请刷新箱子列表后重试。";
+                else if (chests.Select(c => StorageCatalog.UnavailableReason(c!)).FirstOrDefault(reason => reason != null) is string unavailable)
+                    message = unavailable;
                 else if (physical && chests.Any(c => !ReferenceEquals(c!.Location, actor.currentLocation)
                     || Microsoft.Xna.Framework.Vector2.Distance(c.TileLocation, actor.Tile) > 3))
                     message = "请走近箱子后再操作。";
